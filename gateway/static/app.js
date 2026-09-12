@@ -1168,9 +1168,9 @@
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        notify(includeKeys ? '已导出完整备份（含 Key）' : '已导出配置（不含 Key）', 'ok');
+        notify(includeKeys ? 'Full backup exported (with keys)' : 'Configuration exported (no keys)', 'ok');
       })
-      .catch((err) => notify('导出失败：' + err.message, 'err'));
+      .catch((err) => notify('Export failed: ' + err.message, 'err'));
   }
 
   function importBundle() {
@@ -1185,7 +1185,7 @@
     try {
       payload = JSON.parse(await file.text());
     } catch (err) {
-      notify('备份文件不是合法 JSON：' + err.message, 'err');
+      notify('Backup file is not valid JSON: ' + err.message, 'err');
       return;
     }
     const keys = payload.keys || {};
@@ -1195,17 +1195,17 @@
     const modelCount = payload.config && payload.config.models
       ? Object.keys(payload.config.models).length : 0;
 
-    const message = '将导入该备份：\n\n'
-      + '· 服务商：' + providerCount + ' 个\n'
-      + '· 模型：' + modelCount + ' 个\n'
-      + '· API Key：' + keyCount + ' 个\n\n'
-      + '当前配置会被替换（本机已有但备份里没有的 Key 会保留）。确定继续吗？';
+    const message = 'This backup will import:\n\n'
+      + '· Providers: ' + providerCount + '\n'
+      + '· Models: ' + modelCount + '\n'
+      + '· API keys: ' + keyCount + '\n\n'
+      + 'The current configuration will be replaced (keys that exist locally but are not in the backup are kept). Continue?';
     if (!window.confirm(message)) return;
 
     try {
       const result = await api('/api/admin/config/bundle', { method: 'POST', body: payload });
-      notify('已导入：' + result.providers + ' 服务商 / ' + result.models + ' 模型 / '
-        + (result.keys_restored || []).length + ' 个 Key', 'ok');
+      notify('Imported: ' + result.providers + ' providers / ' + result.models + ' models / '
+        + (result.keys_restored || []).length + ' keys', 'ok');
       await loadConfig();
       loadStatus().catch(() => {});
     } catch (err) { notify(err.message, 'err'); }

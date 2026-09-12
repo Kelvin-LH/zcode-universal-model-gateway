@@ -552,11 +552,11 @@ def build_admin_router(
         if payload.get("format") != BUNDLE_FORMAT:
             raise HTTPException(
                 status_code=400,
-                detail="不是有效的完整备份文件（缺少 format 标记）",
+                detail="Not a valid full backup file (missing format marker)",
             )
         config_data = payload.get("config")
         if not isinstance(config_data, dict):
-            raise HTTPException(status_code=400, detail="备份文件缺少 config 内容")
+            raise HTTPException(status_code=400, detail="Backup file is missing config content")
 
         previous = manager.config
         try:
@@ -566,7 +566,7 @@ def build_admin_router(
 
         keys = payload.get("keys") or {}
         if not isinstance(keys, dict):
-            raise HTTPException(status_code=400, detail="备份文件的 keys 字段格式不正确")
+            raise HTTPException(status_code=400, detail="Backup file has an invalid 'keys' field")
 
         # Validate keys belong to providers that exist in the restored config,
         # so a hand-edited backup cannot introduce orphaned credentials.
@@ -574,7 +574,7 @@ def build_admin_router(
         if unknown:
             raise HTTPException(
                 status_code=400,
-                detail="备份文件包含配置中不存在的服务商 Key：" + ", ".join(map(str, unknown)),
+                detail="Backup file contains keys for providers not in the configuration: " + ", ".join(map(str, unknown)),
             )
 
         manager.save_config(new_config)

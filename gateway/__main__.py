@@ -51,13 +51,13 @@ def ensure_config(path: str) -> None:
         if example.is_file():
             shutil.copyfile(example, target)
             logging.getLogger("zumg").info(
-                "已从 %s 生成 %s", example.name, target.name
+                "Generated %s from %s", target.name, example.name
             )
             return
 
 
 def print_banner(host: str, port: int) -> None:
-    """Print a Chinese startup banner.
+    """Print the startup banner.
 
     Printed from Python (not the shell launchers) so the text is correct on
     any Windows locale and does not depend on the console code page.
@@ -67,10 +67,10 @@ def print_banner(host: str, port: int) -> None:
     print(line)
     print("  ZCode Universal Model Gateway")
     print("-" * 58)
-    print(f"  管理界面  : http://{host}:{port}/")
-    print(f"  ZCode 地址: http://{host}:{port}/v1")
+    print(f"  Admin UI  : http://{host}:{port}/")
+    print(f"  ZCode URL : http://{host}:{port}/v1")
     print("-" * 58)
-    print("  按 Ctrl+C 停止服务。")
+    print("  Press Ctrl+C to stop.")
     print(line)
     print(flush=True)
 
