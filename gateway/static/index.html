@@ -128,6 +128,17 @@
           </div>
         </div>
         <div class="panel">
+          <h2>完整备份（换电脑用）</h2>
+          <p class="sub">把一个文件导出，其中包含全部服务商、模型、思考档位配置，<strong>以及已保存的 API Key</strong>。拿到另一台电脑后点“导入完整备份”即可，无需重新配置。</p>
+          <p class="sub"><strong>注意：</strong>该备份文件含有明文 Key，请存放在安全的地方，不要上传到网盘、GitHub 或聊天工具。</p>
+          <div class="row-actions">
+            <button class="btn primary" id="bundle-export" type="button">导出完整备份</button>
+            <button class="btn" id="bundle-import" type="button">导入完整备份</button>
+            <button class="btn" id="bundle-export-nokey" type="button">导出（不含 Key）</button>
+          </div>
+          <div id="bundle-info" class="mt"></div>
+        </div>
+        <div class="panel">
           <div class="tabs">
             <button data-tab="form" class="active" id="config-tab-form" type="button">表单模式</button>
             <button data-tab="raw" id="config-tab-raw" type="button">原始 YAML 模式</button>
@@ -174,6 +185,7 @@
   <div id="toast"></div>
   <div id="modal-root"></div>
   <input type="file" id="config-file-input" accept=".yaml,.yml,.txt" style="display:none" />
+  <input type="file" id="bundle-file-input" accept=".json,application/json" style="display:none" />
 
   <script src="/static/app.js"></script>
 </body>

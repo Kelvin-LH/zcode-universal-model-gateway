@@ -1150,6 +1150,67 @@
     } catch (err) { notify(err.message, 'err'); }
   }
 
+  // ------------------------------------------------- full backup (bundle)
+  function exportBundle(includeKeys) {
+    const path = '/api/admin/config/bundle' + (includeKeys ? '' : '?include_keys=false');
+    fetch(path, { headers: state.token ? { 'x-admin-token': state.token } : {} })
+      .then((response) => {
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.text();
+      })
+      .then((text) => {
+        const stamp = new Date().toISOString().slice(0, 10);
+        const name = includeKeys ? `zumg-backup-${stamp}.json` : `zumg-config-${stamp}.json`;
+        const blob = new Blob([text], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = el('a', { href: url, download: name });
+        document.body.append(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        notify(includeKeys ? '已导出完整备份（含 Key）' : '已导出配置（不含 Key）', 'ok');
+      })
+      .catch((err) => notify('导出失败：' + err.message, 'err'));
+  }
+
+  function importBundle() {
+    $('#bundle-file-input').click();
+  }
+
+  async function handleBundleFile(event) {
+    const file = event.target.files && event.target.files[0];
+    event.target.value = '';
+    if (!file) return;
+    let payload;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch (err) {
+      notify('备份文件不是合法 JSON：' + err.message, 'err');
+      return;
+    }
+    const keys = payload.keys || {};
+    const keyCount = Object.keys(keys).length;
+    const providerCount = payload.config && payload.config.providers
+      ? Object.keys(payload.config.providers).length : 0;
+    const modelCount = payload.config && payload.config.models
+      ? Object.keys(payload.config.models).length : 0;
+
+    const message = '将导入该备份：\n\n'
+      + '· 服务商：' + providerCount + ' 个\n'
+      + '· 模型：' + modelCount + ' 个\n'
+      + '· API Key：' + keyCount + ' 个\n\n'
+      + '当前配置会被替换（本机已有但备份里没有的 Key 会保留）。确定继续吗？';
+    if (!window.confirm(message)) return;
+
+    try {
+      const result = await api('/api/admin/config/bundle', { method: 'POST', body: payload });
+      notify('已导入：' + result.providers + ' 服务商 / ' + result.models + ' 模型 / '
+        + (result.keys_restored || []).length + ' 个 Key', 'ok');
+      await loadConfig();
+      loadStatus().catch(() => {});
+    } catch (err) { notify(err.message, 'err'); }
+  }
+
   // ------------------------------------------------------------------ logs
   async function loadLogs() {
     const data = await api('/api/admin/logs?limit=100');
@@ -1324,6 +1385,10 @@
     $('#config-upload').addEventListener('click', () => uploadConfig());
     $('#config-reset').addEventListener('click', () => resetConfig());
     $('#config-file-input').addEventListener('change', (event) => handleConfigFile(event).catch((err) => notify(err.message, 'err')));
+    $('#bundle-export').addEventListener('click', () => exportBundle(true));
+    $('#bundle-export-nokey').addEventListener('click', () => exportBundle(false));
+    $('#bundle-import').addEventListener('click', () => importBundle());
+    $('#bundle-file-input').addEventListener('change', (event) => handleBundleFile(event).catch((err) => notify(err.message, 'err')));
 
     $('#logs-refresh').addEventListener('click', () => loadLogs().catch((err) => notify(err.message, 'err')));
 

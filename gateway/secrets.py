@@ -152,6 +152,50 @@ class SecretStore:
     def has_persistent(self, provider_id: str) -> bool:
         return bool(self._persistent.get(provider_id))
 
+    def export_keys(self, only_providers: set[str] | None = None) -> dict[str, str]:
+        """All saved local keys, for a full backup.
+
+        Only the persisted keys are returned: temporary ones live in memory and
+        are deliberately excluded. Callers must not expose the result through a
+        normal API response.
+
+        ``only_providers`` limits the export to providers that still exist in
+        the configuration, so a backup does not carry stale keys.
+        """
+        if only_providers is None:
+            return dict(self._persistent)
+        return {
+            pid: key
+            for pid, key in self._persistent.items()
+            if pid in only_providers
+        }
+
+    def import_keys(self, keys: Mapping[str, str]) -> list[str]:
+        """Merge saved keys from a backup.
+
+        Existing keys for providers not present in ``keys`` are kept, so
+        restoring a backup on a machine that already has other providers does
+        not wipe them. Returns the provider ids that were written.
+        """
+        written: list[str] = []
+        for provider_id, key in (keys or {}).items():
+            if isinstance(key, str) and key:
+                self._persistent[str(provider_id)] = key
+                written.append(str(provider_id))
+        if written:
+            self._save()
+        return written
+
+    def replace_keys(self, keys: Mapping[str, str]) -> list[str]:
+        """Replace every saved key with the backup's contents."""
+        self._persistent = {
+            str(pid): str(key)
+            for pid, key in (keys or {}).items()
+            if isinstance(key, str) and key
+        }
+        self._save()
+        return sorted(self._persistent)
+
     def clear(self, provider_id: str) -> None:
         """Forget a provider's key everywhere (temporary and local)."""
         self.clear_temporary(provider_id)
