@@ -15,3 +15,8 @@ config.yaml
 secrets.local.json
 *.local.json
 .DS_Store
+
+# PyInstaller build output (rebuild with build_exe.bat)
+build/
+dist/
+*.spec.bak

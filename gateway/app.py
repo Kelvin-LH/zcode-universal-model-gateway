@@ -25,12 +25,13 @@ from .config import ConfigManager
 from .errors import GatewayError, UnknownModelError, UpstreamError
 from .metrics import Metrics
 from .models import list_models, resolve_model
-from .router import Router
+from .paths import static_dir
+from .router import Router, test_connection
 from .secrets import SecretStore, default_secrets_path
 
 log = logging.getLogger("zumg.app")
 
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = static_dir()
 DEFAULT_CONFIG_PATH = "config.yaml"
 HOST_ENV = "GATEWAY_HOST"
 PORT_ENV = "GATEWAY_PORT"
