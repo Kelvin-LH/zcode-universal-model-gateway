@@ -533,7 +533,7 @@ class Adapter(abc.ABC):
         for field in fields:
             if requested_body.get(field) is not None:
                 raise UnsupportedFeatureError(
-                    f"parameter {field!r} cannot be converted to this provider protocol without changing semantics"
+                    f"参数 {field!r} 无法在不改变语义的前提下转换到该服务商协议"
                 )
 
 
@@ -545,8 +545,8 @@ def require_api_key(provider: ProviderConfig, api_key: str | None) -> str:
     env_name = provider.api_key_env
     if env_name:
         raise ProviderAuthError(
-            f"environment variable {env_name} is not set."
+            f"环境变量 {env_name} 未配置。"
         )
     raise ProviderAuthError(
-        f"provider {provider.display_name!r} has no API key configured."
+        f"服务商 {provider.display_name!r} 尚未配置 API Key。"
     )

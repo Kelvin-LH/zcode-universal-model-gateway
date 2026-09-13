@@ -1,13 +1,11 @@
-# ZCode Universal Model Gateway - example configuration.
+# ZCode Universal Model Gateway - 示例配置。
 #
-# Copy this file to config.yaml and adjust as needed. API keys never go here:
-# each provider names an environment variable via api_key_env, and the real
-# key is read from that environment variable.
+# 复制本文件为 config.yaml 后按需修改。API Key 绝不写在这里：
+# 每个服务商用 api_key_env 指定一个环境变量名，真实 Key 从该环境变量读取。
 
 settings:
-  # alias: a @level suffix on the model name always wins over any reasoning
-  # parameter the client sends in the request body.
-  # client: the client request body takes precedence.
+  # alias：模型名后的 @档位 始终优先于客户端请求里自带的 reasoning 参数。
+  # client：以客户端请求体为准。
   reasoning_precedence: alias
   log_capacity: 500
   log_page_size: 100
@@ -15,21 +13,21 @@ settings:
 providers:
 
   provider_responses:
-    display_name: Responses Provider
+    display_name: Responses 服务商
     protocol: openai_responses
     base_url: https://example.com/v1
     api_key_env: PROVIDER_RESPONSES_KEY
     timeout: 600
 
   provider_chat:
-    display_name: Chat Provider
+    display_name: Chat 服务商
     protocol: openai_chat
     base_url: https://example.com/v1
     api_key_env: PROVIDER_CHAT_KEY
     timeout: 600
 
   provider_anthropic:
-    display_name: Anthropic Provider
+    display_name: Anthropic 服务商
     protocol: anthropic_messages
     base_url: https://example.com
     api_key_env: ANTHROPIC_API_KEY
@@ -38,7 +36,7 @@ providers:
 models:
 
   reasoning-model:
-    display_name: Example Reasoning Model
+    display_name: 示例推理模型
     provider: provider_responses
     upstream_model: actual-model-id
     enabled: true
@@ -64,13 +62,13 @@ models:
             effort: max
 
   normal-model:
-    display_name: Example Plain Model
+    display_name: 示例普通模型
     provider: provider_chat
     upstream_model: model-without-reasoning
     enabled: true
 
   claude-model:
-    display_name: Example Claude Model
+    display_name: 示例 Claude 模型
     provider: provider_anthropic
     upstream_model: claude-3-5-sonnet-latest
     enabled: true

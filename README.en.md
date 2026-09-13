@@ -452,7 +452,8 @@ clear error:
 
 ## Web Admin UI
 
-Open <http://127.0.0.1:8787/> (or `/ui`). Pages:
+Open <http://127.0.0.1:8787/> (or `/ui`). The UI itself is in Chinese; the page
+names below are English renderings of the on-screen labels. Pages:
 
 - **Dashboard** — runtime status, counts, the ZCode Base URL (with copy button),
   recent requests/errors.

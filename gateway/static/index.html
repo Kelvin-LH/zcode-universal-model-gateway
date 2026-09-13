@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -8,114 +8,114 @@
 </head>
 <body>
   <header class="topbar">
-    <button id="nav-toggle" type="button" aria-label="Toggle navigation">&#9776;</button>
+    <button id="nav-toggle" type="button" aria-label="切换导航">&#9776;</button>
     <div class="brand">ZCode Universal Model Gateway<span class="ver" id="version-badge"></span></div>
     <div class="topbar-actions">
-      <span id="config-status" class="badge muted">Loading…</span>
+      <span id="config-status" class="badge muted">加载中…</span>
     </div>
   </header>
 
   <div class="layout">
     <nav id="sidebar">
-      <a data-view="dashboard" class="active">Dashboard</a>
-      <a data-view="providers">Providers</a>
-      <a data-view="models">Models</a>
-      <a data-view="console">Test Console</a>
-      <a data-view="configuration">Config</a>
-      <a data-view="logs">Logs</a>
-      <a data-view="about">About</a>
+      <a data-view="dashboard" class="active">总览</a>
+      <a data-view="providers">服务商</a>
+      <a data-view="models">模型</a>
+      <a data-view="console">测试台</a>
+      <a data-view="configuration">配置</a>
+      <a data-view="logs">日志</a>
+      <a data-view="about">关于</a>
     </nav>
 
     <main id="content">
-      <!-- Dashboard -->
+      <!-- 总览 -->
       <section id="view-dashboard" class="view active">
-        <h1>Dashboard</h1>
-        <p class="sub">Gateway status and recent activity.</p>
+        <h1>总览</h1>
+        <p class="sub">网关运行状态与最近活动。</p>
         <div class="cards" id="dash-cards"></div>
         <div class="panel">
           <h2>ZCode Base URL</h2>
-          <p class="sub">Enter this URL in ZCode's OpenAI Responses-compatible provider configuration.</p>
+          <p class="sub">把下面这个地址填入 ZCode 的 OpenAI Responses 兼容服务商配置里。</p>
           <div class="inline">
             <input type="text" id="zcode-base-url" class="mono" readonly />
-            <button class="btn" id="copy-base-url" type="button">Copy</button>
+            <button class="btn" id="copy-base-url" type="button">复制</button>
           </div>
         </div>
         <div class="grid-2">
           <div class="panel">
-            <h2>Recent Requests</h2>
+            <h2>最近请求</h2>
             <div id="dash-recent"></div>
           </div>
           <div class="panel">
-            <h2>Recent Errors</h2>
+            <h2>最近错误</h2>
             <div id="dash-errors"></div>
           </div>
         </div>
       </section>
 
-      <!-- Providers -->
+      <!-- 服务商 -->
       <section id="view-providers" class="view">
         <div class="section-head">
           <div>
-            <h1>Providers</h1>
-            <p class="sub">Upstream APIs the gateway can forward to. API keys can be stored in a local key file or read from environment variables.</p>
+            <h1>服务商</h1>
+            <p class="sub">网关可以转发到的上游 API。API Key 可保存到本地密钥文件，或从环境变量读取。</p>
           </div>
-          <button class="btn primary" id="add-provider" type="button">+ Add Provider</button>
+          <button class="btn primary" id="add-provider" type="button">+ 添加服务商</button>
         </div>
         <div class="panel table-wrap" id="providers-table"></div>
       </section>
 
-      <!-- Models -->
+      <!-- 模型 -->
       <section id="view-models" class="view">
         <div class="section-head">
           <div>
-            <h1>Models</h1>
-            <p class="sub">Logical models and their reasoning tiers. Each tier is exposed as a virtual model ID such as <span class="mono">model-name@tier</span>.</p>
+            <h1>模型</h1>
+            <p class="sub">逻辑模型及其思考档位。每个档位会暴露成 <span class="mono">模型名@档位</span> 这样的虚拟模型 ID。</p>
           </div>
-          <button class="btn primary" id="add-model" type="button">+ Add Model</button>
+          <button class="btn primary" id="add-model" type="button">+ 添加模型</button>
         </div>
         <div class="panel table-wrap" id="models-table"></div>
       </section>
 
-      <!-- Test Console -->
+      <!-- 测试台 -->
       <section id="view-console" class="view">
-        <h1>Test Console</h1>
-        <p class="sub">Send requests through the gateway and inspect the transformed upstream request.</p>
+        <h1>测试台</h1>
+        <p class="sub">通过网关发送请求，并查看转换后的上游请求内容。</p>
         <div class="tabs">
-          <button data-tab="single" class="active" id="console-tab-single" type="button">Single Test</button>
-          <button data-tab="compare" id="console-tab-compare" type="button">Level Comparison</button>
+          <button data-tab="single" class="active" id="console-tab-single" type="button">单次测试</button>
+          <button data-tab="compare" id="console-tab-compare" type="button">档位对比</button>
         </div>
 
         <div id="console-single-mode">
         <div class="panel">
           <div class="field">
-            <label for="console-model">Model</label>
+            <label for="console-model">模型</label>
             <select id="console-model"></select>
           </div>
           <div class="field">
-            <label for="console-instructions">Instructions (system prompt)</label>
-            <textarea id="console-instructions" placeholder="Optional system instructions"></textarea>
+            <label for="console-instructions">Instructions（系统指令）</label>
+            <textarea id="console-instructions" placeholder="可选的系统指令"></textarea>
           </div>
           <div class="field">
-            <label for="console-input">Input</label>
-            <textarea id="console-input" style="min-height:120px" placeholder="Ask the model a question…"></textarea>
+            <label for="console-input">Input（输入）</label>
+            <textarea id="console-input" style="min-height:120px" placeholder="向模型提问…"></textarea>
           </div>
           <div class="status-row mb">
-            <label class="check"><input type="checkbox" id="console-stream" checked /> Stream</label>
-            <label class="check"><input type="checkbox" id="console-raw" /> Show raw response</label>
-            <label class="check"><input type="checkbox" id="console-preview" checked /> Show request preview</label>
+            <label class="check"><input type="checkbox" id="console-stream" checked /> 流式输出</label>
+            <label class="check"><input type="checkbox" id="console-raw" /> 显示原始响应</label>
+            <label class="check"><input type="checkbox" id="console-preview" checked /> 显示请求预览</label>
           </div>
           <div class="inline">
-            <button class="btn primary" id="console-send" type="button">Send</button>
-            <button class="btn" id="console-stop" type="button" disabled>Stop</button>
-            <button class="btn" id="console-clear" type="button">Clear</button>
+            <button class="btn primary" id="console-send" type="button">发送</button>
+            <button class="btn" id="console-stop" type="button" disabled>停止</button>
+            <button class="btn" id="console-clear" type="button">清空</button>
           </div>
         </div>
         <div class="panel" id="console-preview-panel" style="display:none">
-          <h2>Request Preview</h2>
+          <h2>请求预览</h2>
           <pre class="code" id="console-preview-out"></pre>
         </div>
         <div class="panel">
-          <h2>Output</h2>
+          <h2>输出</h2>
           <div class="stream-out" id="console-output"></div>
         </div>
         </div>
@@ -123,101 +123,101 @@
         <div id="console-compare-mode" style="display:none">
           <div class="panel">
             <div class="field">
-              <label for="compare-model">Model</label>
+              <label for="compare-model">模型</label>
               <select id="compare-model"></select>
-              <div class="hint">Only models with reasoning levels are listed. The comparison sends the same request once per selected level.</div>
+              <div class="hint">只列出配置了思考档位的模型。对比会为每个勾选的档位各发送一次相同的请求。</div>
             </div>
             <div class="field">
-              <label>Reasoning levels</label>
+              <label>思考档位</label>
               <div id="compare-levels" class="status-row"></div>
             </div>
             <div class="field">
-              <label for="compare-instructions">Instructions (system prompt)</label>
-              <textarea id="compare-instructions" placeholder="Optional system instructions"></textarea>
+              <label for="compare-instructions">Instructions（系统指令）</label>
+              <textarea id="compare-instructions" placeholder="可选的系统指令"></textarea>
             </div>
             <div class="field">
-              <label for="compare-input">Input</label>
-              <textarea id="compare-input" style="min-height:120px" placeholder="Ask every level the same question…"></textarea>
+              <label for="compare-input">Input（输入）</label>
+              <textarea id="compare-input" style="min-height:120px" placeholder="向所有档位提同一个问题…"></textarea>
             </div>
             <div class="status-row mb">
-              <label class="check"><input type="checkbox" id="compare-stream" checked /> Streaming requests (measures time to first reasoning chunk, and carries usage on protocols that support it)</label>
+              <label class="check"><input type="checkbox" id="compare-stream" checked /> 流式请求（可测量首个思考片段的到达时间，并在支持的协议上携带 usage）</label>
             </div>
             <div class="inline">
-              <button class="btn primary" id="compare-send" type="button">Start Comparison</button>
-              <button class="btn" id="compare-stop" type="button" disabled>Stop</button>
+              <button class="btn primary" id="compare-send" type="button">开始对比</button>
+              <button class="btn" id="compare-stop" type="button" disabled>停止</button>
             </div>
-            <p class="sub" style="margin:12px 0 0">Note: every level is a real upstream call and may incur cost. Read the results by reasoning tokens first; when the upstream does not report tokens, fall back to the reasoning character count, and when both are missing only latency is left to compare. If the upstream does not return reasoning content by default, add request_overrides to the model config to request a reasoning summary (e.g. <span class="mono">reasoning.summary=auto</span> for the Responses protocol).</p>
+            <p class="sub" style="margin:12px 0 0">注意：每个档位都会真实调用一次上游，可能产生费用。判读依据优先看思考 token；上游未上报 token 时退化为思考字符数，两者都缺失时只能参考耗时。若上游默认不返回思考内容，可在模型配置里用 request_overrides 让上游返回思考摘要（例如 Responses 协议的 <span class="mono">reasoning.summary=auto</span>）。</p>
           </div>
           <div class="panel" id="compare-summary-panel" style="display:none">
-            <h2>Comparison</h2>
+            <h2>对比</h2>
             <div id="compare-summary"></div>
           </div>
           <div class="compare-grid" id="compare-results"></div>
         </div>
       </section>
 
-      <!-- Config -->
+      <!-- 配置 -->
       <section id="view-configuration" class="view">
         <div class="section-head">
           <div>
-            <h1>Config</h1>
-            <p class="sub">Edit the configuration as YAML. Invalid YAML is rejected, and the active configuration is never overwritten.</p>
+            <h1>配置</h1>
+            <p class="sub">以 YAML 方式编辑配置。无效的 YAML 会被拒绝，绝不会覆盖当前生效的配置。</p>
           </div>
           <div class="row-actions">
-            <button class="btn" id="config-download" type="button">Download Config</button>
-            <button class="btn" id="config-upload" type="button">Upload Config</button>
-            <button class="btn danger" id="config-reset" type="button">Reset to Sample</button>
+            <button class="btn" id="config-download" type="button">下载配置</button>
+            <button class="btn" id="config-upload" type="button">上传配置</button>
+            <button class="btn danger" id="config-reset" type="button">重置为示例</button>
           </div>
         </div>
         <div class="panel">
-          <h2>Full Backup (for moving to another computer)</h2>
-          <p class="sub">Export a single file containing all providers, models and reasoning-level configuration, <strong>plus the saved API keys</strong>. On another computer, click "Import full backup" and you are done — no re-configuration needed.</p>
-          <p class="sub"><strong>Note:</strong> the backup file contains keys in plain text. Store it somewhere safe; do not upload it to cloud drives, GitHub, or chat apps.</p>
+          <h2>完整备份（换电脑用）</h2>
+          <p class="sub">把一个文件导出，其中包含全部服务商、模型、思考档位配置，<strong>以及已保存的 API Key</strong>。拿到另一台电脑后点“导入完整备份”即可，无需重新配置。</p>
+          <p class="sub"><strong>注意：</strong>该备份文件含有明文 Key，请存放在安全的地方，不要上传到网盘、GitHub 或聊天工具。</p>
           <div class="row-actions">
-            <button class="btn primary" id="bundle-export" type="button">Export full backup</button>
-            <button class="btn" id="bundle-import" type="button">Import full backup</button>
-            <button class="btn" id="bundle-export-nokey" type="button">Export (no keys)</button>
+            <button class="btn primary" id="bundle-export" type="button">导出完整备份</button>
+            <button class="btn" id="bundle-import" type="button">导入完整备份</button>
+            <button class="btn" id="bundle-export-nokey" type="button">导出（不含 Key）</button>
           </div>
           <div id="bundle-info" class="mt"></div>
         </div>
         <div class="panel">
           <div class="tabs">
-            <button data-tab="form" class="active" id="config-tab-form" type="button">Form Mode</button>
-            <button data-tab="raw" id="config-tab-raw" type="button">Raw YAML Mode</button>
+            <button data-tab="form" class="active" id="config-tab-form" type="button">表单模式</button>
+            <button data-tab="raw" id="config-tab-raw" type="button">原始 YAML 模式</button>
           </div>
           <div id="config-form-mode">
-            <p class="muted">Use the <strong>Providers</strong> and <strong>Models</strong> pages for form-based editing. Switch to Raw YAML Mode to edit directly or to import/export.</p>
+            <p class="muted">请使用 <strong>服务商</strong> 和 <strong>模型</strong> 页面进行表单化编辑。需要直接编辑或导入导出时，切换到原始 YAML 模式。</p>
           </div>
           <div id="config-raw-mode" style="display:none">
             <textarea id="config-yaml" spellcheck="false" style="min-height:320px"></textarea>
             <div class="inline mt">
-              <button class="btn primary" id="config-save" type="button">Validate &amp; Save</button>
-              <button class="btn" id="config-validate" type="button">Validate</button>
-              <button class="btn" id="config-reload" type="button">Reload from Disk</button>
+              <button class="btn primary" id="config-save" type="button">校验并保存</button>
+              <button class="btn" id="config-validate" type="button">校验</button>
+              <button class="btn" id="config-reload" type="button">从磁盘重新加载</button>
             </div>
             <div id="config-diff" class="mt"></div>
           </div>
         </div>
       </section>
 
-      <!-- Logs -->
+      <!-- 日志 -->
       <section id="view-logs" class="view">
         <div class="section-head">
           <div>
-            <h1>Logs</h1>
-            <p class="sub">Recent request records. Prompts, tool outputs, request headers, and API keys are never logged.</p>
+            <h1>日志</h1>
+            <p class="sub">最近请求记录。不会记录 Prompt、工具输出、请求头或 API Key。</p>
           </div>
-          <button class="btn" id="logs-refresh" type="button">Refresh</button>
+          <button class="btn" id="logs-refresh" type="button">刷新</button>
         </div>
         <div class="panel table-wrap" id="logs-table"></div>
       </section>
 
-      <!-- About -->
+      <!-- 关于 -->
       <section id="view-about" class="view">
-        <h1>About</h1>
-        <p class="sub">ZCode Universal Model Gateway (ZUMG)</p>
+        <h1>关于</h1>
+        <p class="sub">ZCode Universal Model Gateway（ZUMG）</p>
         <div class="panel">
-          <p>ZUMG lets ZCode connect to a single local OpenAI Responses-compatible endpoint while the gateway forwards requests to multiple providers and models. Reasoning tiers are fully configurable and are exposed as virtual model IDs such as <span class="mono">model-name@tier</span>.</p>
+          <p>ZUMG 让 ZCode 只连接一个本地 OpenAI Responses 兼容端点，由网关把请求转发到多个服务商和模型。思考档位完全可配置，并会以 <span class="mono">模型名@档位</span> 这样的虚拟模型 ID 暴露出去。</p>
           <div id="about-details"></div>
         </div>
       </section>

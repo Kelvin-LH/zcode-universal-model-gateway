@@ -183,15 +183,15 @@ class Router:
         except httpx.TimeoutException as exc:
             error_type = "upstream_timeout"
             raise UpstreamTimeoutError(
-                f"upstream provider {resolved.provider_id!r} timed out"
+                f"上游服务商 {resolved.provider_id!r} 请求超时"
             ) from exc
         except httpx.HTTPError as exc:
             error_type = "upstream_error"
-            raise UpstreamError(f"upstream request failed: {exc}") from exc
+            raise UpstreamError(f"上游请求失败：{exc}") from exc
         except json.JSONDecodeError as exc:
             error_type = "adapter_error"
             raise UpstreamError(
-                "upstream response body is not valid JSON"
+                "上游返回的响应体不是合法 JSON"
             ) from exc
         finally:
             latency = (time.perf_counter() - started) * 1000
@@ -258,7 +258,7 @@ class Router:
     def _raise_upstream_error(response: httpx.Response) -> None:
         body = response.content
         content_type = response.headers.get("content-type")
-        message = f"upstream returned HTTP {response.status_code}"
+        message = f"上游返回 HTTP {response.status_code}"
         try:
             parsed = json.loads(body.decode("utf-8", "replace"))
             if isinstance(parsed, dict):

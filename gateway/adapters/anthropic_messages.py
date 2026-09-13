@@ -52,7 +52,7 @@ def _anthropic_content_blocks(content: Any) -> list[dict[str, Any]]:
                 url = url.get("url")
             if not url:
                 raise UnsupportedFeatureError(
-                    "image content without a URL cannot be converted to Anthropic Messages"
+                    "缺少 URL 的图片内容无法转换到 Anthropic Messages"
                 )
             if url.startswith("data:"):
                 try:
@@ -60,7 +60,7 @@ def _anthropic_content_blocks(content: Any) -> list[dict[str, Any]]:
                     media_type = header.split(";", 1)[0].split(":", 1)[1]
                 except (ValueError, IndexError) as exc:
                     raise UnsupportedFeatureError(
-                        "malformed data URL in image content"
+                        "图片内容中的 data URL 格式不正确"
                     ) from exc
                 blocks.append(
                     {
@@ -78,7 +78,7 @@ def _anthropic_content_blocks(content: Any) -> list[dict[str, Any]]:
             blocks.append({"type": "text", "text": str(part.get("refusal", ""))})
         else:
             raise UnsupportedFeatureError(
-                f"content block type {ptype!r} cannot be converted to Anthropic Messages"
+                f"内容块类型 {ptype!r} 无法转换到 Anthropic Messages"
             )
     return blocks
 
@@ -92,7 +92,7 @@ def input_to_messages(inp: Any) -> tuple[str, list[dict[str, Any]]]:
             [{"role": "user", "content": [{"type": "text", "text": inp}]}] if inp else []
         )
     if not isinstance(inp, list):
-        raise AdapterError("'input' must be a string or an array of input items")
+        raise AdapterError("'input' 必须是字符串或输入项数组")
 
     system_parts: list[str] = []
     messages: list[dict[str, Any]] = []
@@ -109,7 +109,7 @@ def input_to_messages(inp: Any) -> tuple[str, list[dict[str, Any]]]:
             messages.append({"role": "user", "content": item})
             continue
         if not isinstance(item, dict):
-            raise AdapterError("each input item must be an object")
+            raise AdapterError("输入项必须是对象")
         itype = item.get("type")
 
         if itype == "function_call":
@@ -160,7 +160,7 @@ def input_to_messages(inp: Any) -> tuple[str, list[dict[str, Any]]]:
             )
             continue
         raise UnsupportedFeatureError(
-            f"input item type {itype!r} / role {role!r} cannot be converted to Anthropic Messages"
+            f"输入项类型 {itype!r} / 角色 {role!r} 无法转换到 Anthropic Messages"
         )
 
     flush_tool_results()
@@ -177,7 +177,7 @@ def _parse_arguments(arguments: Any) -> Any:
             parsed = json.loads(arguments)
         except json.JSONDecodeError as exc:
             raise UnsupportedFeatureError(
-                "tool call arguments are not valid JSON and cannot be converted to Anthropic Messages"
+                "工具调用参数不是合法 JSON，无法转换到 Anthropic Messages"
             ) from exc
         return parsed
     return arguments
@@ -189,11 +189,11 @@ def _tools_to_anthropic(tools: Any) -> list[dict[str, Any]] | None:
     out: list[dict[str, Any]] = []
     for tool in tools:
         if not isinstance(tool, dict):
-            raise AdapterError("each tool must be an object")
+            raise AdapterError("每个 tool 必须是对象")
         ttype = tool.get("type", "function")
         if ttype != "function":
             raise UnsupportedFeatureError(
-                f"tool type {ttype!r} cannot be converted to Anthropic Messages"
+                f"tool 类型 {ttype!r} 无法转换到 Anthropic Messages"
             )
         fn = tool.get("function") if isinstance(tool.get("function"), dict) else tool
         entry: dict[str, Any] = {"name": fn.get("name")}
@@ -217,21 +217,21 @@ def _tool_choice_to_anthropic(choice: Any) -> dict[str, Any] | None:
             "required": {"type": "any"},
         }
         if choice not in mapping:
-            raise AdapterError(f"unknown tool_choice {choice!r}")
+            raise AdapterError(f"未知的 tool_choice {choice!r}")
         return mapping[choice]
     if isinstance(choice, dict):
         ctype = choice.get("type")
         if ctype == "function":
             name = choice.get("name") or (choice.get("function") or {}).get("name")
             if not name:
-                raise AdapterError("tool_choice function is missing 'name'")
+                raise AdapterError("tool_choice 的 function 缺少 name")
             return {"type": "tool", "name": name}
         if ctype in {"auto", "none", "any"}:
             return {"type": ctype}
         raise UnsupportedFeatureError(
-            f"tool_choice type {ctype!r} cannot be converted to Anthropic Messages"
+            f"tool_choice 类型 {ctype!r} 无法转换到 Anthropic Messages"
         )
-    raise AdapterError("invalid tool_choice")
+    raise AdapterError("无效的 tool_choice")
 
 
 def anthropic_usage_to_responses(usage: Any) -> dict[str, Any]:
@@ -283,7 +283,7 @@ class AnthropicMessagesAdapter(Adapter):
         if isinstance(instructions, str) and instructions:
             system = f"{instructions}\n\n{system}" if system else instructions
         if not messages:
-            raise AdapterError("request contains no input messages")
+            raise AdapterError("请求中没有任何输入消息")
 
         anthropic: dict[str, Any] = {"messages": messages}
         if system:
@@ -317,7 +317,7 @@ class AnthropicMessagesAdapter(Adapter):
 
     def convert_response(self, resolved, upstream: dict[str, Any], status_code: int):
         if not isinstance(upstream, dict):
-            raise AdapterError("upstream response is not a JSON object")
+            raise AdapterError("上游返回的响应不是 JSON 对象")
         if upstream.get("type") == "error":
             return upstream
 
@@ -406,7 +406,7 @@ class AnthropicMessagesAdapter(Adapter):
                 if ctype == "error":
                     err = chunk.get("error") or {}
                     message = err.get("message") if isinstance(err, dict) else str(err)
-                    for ev in builder.fail(message or "upstream streaming response failed"):
+                    for ev in builder.fail(message or "上游流式响应出错"):
                         yield ev
                     return
 
@@ -465,5 +465,5 @@ class AnthropicMessagesAdapter(Adapter):
                 yield ev
         except Exception as exc:  # pragma: no cover - defensive
             log.warning("anthropic stream translation failed: %s", exc)
-            for ev in builder.fail(f"stream translation failed: {exc}"):
+            for ev in builder.fail(f"流式转换失败：{exc}"):
                 yield ev

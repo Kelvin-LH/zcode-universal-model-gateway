@@ -126,26 +126,26 @@ def split_alias(requested: str) -> tuple[str, str | None]:
 def resolve_model(config: Config, requested: str) -> ResolvedModel:
     """Resolve a client-supplied model id against the active config."""
     if not requested:
-        raise UnknownModelError("no model parameter in request")
+        raise UnknownModelError("请求中没有提供 model 参数")
 
     base, level = split_alias(requested)
     model = config.models.get(base)
     if model is None:
-        raise UnknownModelError(f"unknown model {requested!r}")
+        raise UnknownModelError(f"未知模型 {requested!r}")
 
     if not model.enabled:
-        raise ModelDisabledError(f"model {base!r} is disabled")
+        raise ModelDisabledError(f"模型 {base!r} 已被禁用")
 
     reasoning = model.reasoning
     if level is not None:
         if not reasoning or not reasoning.enabled:
             raise UnknownReasoningLevelError(
-                f"model {base!r} does not support reasoning levels"
+                f"模型 {base!r} 不支持思考档位"
             )
         if level not in reasoning.supported:
             raise UnknownReasoningLevelError(
-                f"model {base!r} does not support reasoning level {level!r}; "
-                f"supported levels: {', '.join(reasoning.supported)}"
+                f"模型 {base!r} 不支持思考档位 {level!r}；"
+                f"支持的档位：{', '.join(reasoning.supported)}"
             )
     else:
         level = reasoning.default if reasoning and reasoning.enabled else None
@@ -153,10 +153,10 @@ def resolve_model(config: Config, requested: str) -> ResolvedModel:
     provider = config.providers.get(model.provider)
     if provider is None:
         raise UnknownModelError(
-            f"model {base!r} references unknown provider {model.provider!r}"
+            f"模型 {base!r} 引用了不存在的服务商 {model.provider!r}"
         )
     if not provider.enabled:
-        raise ProviderDisabledError(f"provider {model.provider!r} is disabled")
+        raise ProviderDisabledError(f"服务商 {model.provider!r} 已被禁用")
 
     endpoint_kind = {
         "openai_responses": "responses",

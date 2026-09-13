@@ -10,7 +10,7 @@ async def test_index_serves_html(build_app, client_factory):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     html = response.text
-    for label in ("Providers", "Models", "Test Console", "Config", "Single Test", "Level Comparison"):
+    for label in ("服务商", "模型", "测试台", "配置", "单次测试", "档位对比"):
         assert label in html
 
 

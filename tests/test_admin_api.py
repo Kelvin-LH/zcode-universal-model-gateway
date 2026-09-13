@@ -404,7 +404,7 @@ async def test_bundle_import_rejects_foreign_key(build_app, client_factory):
     }
     resp = await client.post("/api/admin/config/bundle", json=bad)
     assert resp.status_code == 400
-    assert "not in the configuration" in resp.json()["detail"]
+    assert "不存在" in resp.json()["detail"]
 
 
 async def test_bundle_import_rejects_wrong_format(build_app, client_factory):

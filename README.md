@@ -564,8 +564,8 @@ Key）同样被 git 忽略。
 - `.gitattributes` 强制 `start.sh` 使用 LF、Windows 脚本使用 CRLF，因此在
   Linux/macOS 上克隆后 `start.sh` 依然可执行。如果可执行位丢失，用
   `bash start.sh` 或先执行一次 `chmod +x start.sh`。
-- 代码注释、docstring 与标识符保留英文以便复用；界面与错误提示为英文，
-  文档提供中英双语（`README.md` 中文 / `README.en.md` 英文）。
+- 代码注释、docstring 与标识符保留英文以便复用；界面、错误提示与本文档为中文，
+  文档另提供英文版（`README.en.md`）。
 
 ## 已知限制
 
