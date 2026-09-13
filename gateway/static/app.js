@@ -21,13 +21,13 @@
   const LANG_KEY = 'zumg_lang';
 
   const i18n = {
+    // Chinese is the default: a first-time visitor sees the source language
+    // regardless of browser locale, and any explicit pick is remembered.
     lang: (function () {
       const stored = localStorage.getItem(LANG_KEY);
-      if (stored === 'zh' || stored === 'en' || stored === 'ja') return stored;
-      const nav = (navigator.language || '').toLowerCase();
-      if (nav.startsWith('zh')) return 'zh';
-      if (nav.startsWith('ja')) return 'ja';
-      return 'en';
+      return stored === 'zh' || stored === 'en' || stored === 'ja'
+        ? stored
+        : 'zh';
     })(),
     // Longest-first, so a more specific key wins over a shorter one that
     // happens to share a prefix.
