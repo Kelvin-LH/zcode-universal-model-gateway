@@ -917,6 +917,7 @@
     clear(select);
     virtual.forEach((v) => select.append(el('option', { value: v, text: v })));
     if (previous) select.value = previous;
+    loadCompareModels();
   }
 
   function consoleBody(model) {
@@ -1038,6 +1039,310 @@
     }
   }
 
+  // ------------------------------------------------- reasoning comparison
+  //
+  // Sends one question to every selected reasoning level of a model and lines
+  // the answers up side by side, so a user can see whether `model@level`
+  // actually changes how much the upstream thinks. Evidence, in order of
+  // strength: reported reasoning tokens, then reasoning text length, then
+  // latency only (weakest).
+  let compareRun = null;
+
+  function compareModels(models) {
+    return (models || []).filter(
+      (m) => m.enabled && m.reasoning && (m.reasoning.supported || []).length
+    );
+  }
+
+  function loadCompareModels() {
+    const models = compareModels(state.models);
+    const select = $('#compare-model');
+    const previous = select.value;
+    clear(select);
+    models.forEach((m) => {
+      const label = m.display_name && m.display_name !== m.id ? m.id + '（' + m.display_name + '）' : m.id;
+      select.append(el('option', { value: m.id, text: label }));
+    });
+    if (previous && models.some((m) => m.id === previous)) select.value = previous;
+    if (!models.length) {
+      $('#compare-levels').append(
+        el('span', { class: 'muted', text: '还没有配置思考档位的模型。请先在“模型”页面添加档位。' })
+      );
+    }
+    renderCompareLevels();
+  }
+
+  function currentCompareModel() {
+    const id = $('#compare-model').value;
+    return state.models.find((m) => m.id === id) || null;
+  }
+
+  function renderCompareLevels() {
+    const box = $('#compare-levels');
+    clear(box);
+    const model = currentCompareModel();
+    const levels = (model && model.reasoning && model.reasoning.supported) || [];
+    levels.forEach((level) => {
+      const input = el('input', { type: 'checkbox', checked: true });
+      input.dataset.level = level;
+      box.append(el('label', { class: 'check' }, [
+        input,
+        el('span', { text: level + (model.reasoning.default === level ? '（默认）' : '') }),
+      ]));
+    });
+    if (!levels.length) box.append(el('span', { class: 'muted', text: '该模型没有可对比的档位。' }));
+  }
+
+  function selectedCompareLevels() {
+    return Array.from($('#compare-levels').querySelectorAll('input[type="checkbox"]'))
+      .filter((c) => c.checked)
+      .map((c) => c.dataset.level);
+  }
+
+  async function runCompare() {
+    const model = $('#compare-model').value;
+    if (!model) { notify('请先选择一个带思考档位的模型。', 'err'); return; }
+    const levels = selectedCompareLevels();
+    if (!levels.length) { notify('请至少勾选一个思考档位。', 'err'); return; }
+    const input = $('#compare-input').value;
+    if (!input.trim()) { notify('请输入要发送给各档位的问题。', 'err'); return; }
+
+    const body = {};
+    if ($('#compare-instructions').value.trim()) body.instructions = $('#compare-instructions').value;
+    body.input = input;
+
+    compareRun = {
+      model: model,
+      levels: levels,
+      results: {},
+      controller: new AbortController(),
+    };
+    clear($('#compare-results'));
+    clear($('#compare-summary'));
+    $('#compare-summary-panel').style.display = '';
+    $('#compare-results').append(el('p', { class: 'muted', text: '正在按档位逐个发送请求…' }));
+    $('#compare-send').disabled = true;
+    $('#compare-stop').disabled = false;
+
+    const headers = { 'content-type': 'application/json' };
+    if (state.token) headers['x-admin-token'] = state.token;
+
+    try {
+      const response = await fetch('/api/admin/compare', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({ model: model, levels: levels, body: body, stream: $('#compare-stream').checked }),
+        signal: compareRun.controller.signal,
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(extractError(data) || 'HTTP ' + response.status);
+      }
+      clear($('#compare-results'));
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      while (true) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        buffer += decoder.decode(chunk.value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+        for (const line of lines) handleCompareLine(line);
+      }
+      if (buffer.trim()) handleCompareLine(buffer);
+      renderCompareSummary();
+    } catch (err) {
+      if (err.name === 'AbortError') notify('对比已停止。', 'ok');
+      else notify(err.message, 'err');
+    } finally {
+      $('#compare-send').disabled = false;
+      $('#compare-stop').disabled = true;
+      compareRun = null;
+    }
+  }
+
+  function handleCompareLine(line) {
+    line = line.trim();
+    if (!line) return;
+    let event = null;
+    try { event = JSON.parse(line); } catch (e) { return; }
+    if (event.type === 'started') {
+      compareRun.levels = event.levels || compareRun.levels;
+      return;
+    }
+    if (event.type === 'result') {
+      compareRun.results[event.level] = event;
+      renderCompareResult(event);
+      return;
+    }
+    if (event.type === 'done') {
+      renderCompareSummary();
+    }
+  }
+
+  function compareMetricValue(result) {
+    if (result.reasoning_tokens !== null && result.reasoning_tokens !== undefined) {
+      return { value: result.reasoning_tokens, unit: '思考 tokens' };
+    }
+    if (result.reasoning_chars) {
+      return { value: result.reasoning_chars, unit: '思考字符' };
+    }
+    return null;
+  }
+
+  function compareResultCard(result) {
+    const metrics = [
+      el('span', { class: 'chip' }, ['状态 ', badge(String(result.status || '—'), result.ok ? 'ok' : 'err')]),
+      el('span', { class: 'chip' }, ['总耗时 ', el('strong', { text: result.elapsed_ms + ' ms' })]),
+      el('span', {
+        class: 'chip',
+        text: '思考 tokens ' + (result.reasoning_tokens === null || result.reasoning_tokens === undefined ? '未上报' : result.reasoning_tokens),
+      }),
+      el('span', { class: 'chip', text: '思考字符 ' + (result.reasoning_chars || 0) }),
+      el('span', {
+        class: 'chip',
+        text: '首个思考片段 ' + (result.first_reasoning_ms === null || result.first_reasoning_ms === undefined ? '—' : result.first_reasoning_ms + ' ms'),
+      }),
+      el('span', {
+        class: 'chip',
+        text: '输出 tokens ' + (result.output_tokens === null || result.output_tokens === undefined ? '未上报' : result.output_tokens),
+      }),
+    ];
+
+    const children = [
+      el('div', { class: 'flex-between' }, [
+        el('h2', { style: 'margin:0', text: result.level + (result.is_default ? '（默认）' : '') }),
+        el('span', { class: 'mono muted', text: result.virtual_model || '' }),
+      ]),
+      el('div', { class: 'compare-metrics' }, metrics),
+    ];
+
+    if (!result.ok && result.error) {
+      children.push(el('div', { class: 'verdict err', text: '失败：' + result.error }));
+    }
+
+    const mappingJson = JSON.stringify({
+      mapping: result.mapping || {},
+      request_overrides: result.request_overrides || {},
+    }, null, 2);
+    children.push(
+      el('div', { class: 'compare-label', text: '注入到上游请求的参数' }),
+      el('pre', { class: 'code', text: mappingJson })
+    );
+
+    if (result.reasoning_text) {
+      children.push(
+        el('div', { class: 'compare-label', text: '思考内容' + (result.reasoning_truncated ? '（已截断显示）' : '') }),
+        el('div', { class: 'compare-text', text: result.reasoning_text })
+      );
+    }
+    if (result.output_text) {
+      children.push(
+        el('div', { class: 'compare-label', text: '回答' + (result.output_truncated ? '（已截断显示）' : '') }),
+        el('div', { class: 'compare-text', text: result.output_text })
+      );
+    }
+    return el('div', { class: 'panel', id: 'compare-card-' + result.level }, children);
+  }
+
+  function renderCompareResult(result) {
+    const card = $('#compare-card-' + result.level);
+    const fresh = compareResultCard(result);
+    if (card) card.replaceWith(fresh);
+    else $('#compare-results').append(fresh);
+  }
+
+  function renderCompareSummary() {
+    const run = compareRun;
+    if (!run) return;
+    const box = $('#compare-summary');
+    clear(box);
+    const levels = run.levels;
+    const finished = levels.filter((lvl) => run.results[lvl]);
+    if (!finished.length) return;
+
+    // Prefer token counts. A level that produced no thinking at all (chars=0,
+    // no tokens) is simply 0 on the token scale, so it does not force the whole
+    // comparison down to characters. Characters are the fallback only when
+    // some level that did think carries no token count.
+    const tokens = {};
+    const chars = {};
+    finished.forEach((lvl) => {
+      const result = run.results[lvl];
+      tokens[lvl] = result.reasoning_tokens;
+      chars[lvl] = result.reasoning_chars || 0;
+    });
+    const hasTokens = (lvl) => tokens[lvl] !== null && tokens[lvl] !== undefined;
+    const allTokens = finished.every(hasTokens);
+    const anyTokens = finished.some(hasTokens);
+    const tokenBasis = allTokens
+      || (anyTokens && finished.every((lvl) => hasTokens(lvl) || chars[lvl] === 0));
+    const values = finished.map((lvl) => (tokenBasis
+      ? (hasTokens(lvl) ? tokens[lvl] : 0)
+      : chars[lvl]));
+    const max = Math.max.apply(null, values.concat([0]));
+
+    const bars = el('div', { class: 'compare-bars' }, finished.map((lvl, i) => {
+      const value = values[i];
+      const width = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
+      return el('div', { class: 'compare-bar-row' }, [
+        el('span', { class: 'compare-bar-label mono', text: lvl }),
+        el('div', { class: 'compare-bar-track' }, el('div', {
+          class: 'compare-bar', style: 'width:' + width + '%',
+        })),
+        el('span', { class: 'compare-bar-label', text: compareRowLabel(tokens[lvl], value, tokenBasis) }),
+      ]);
+    }));
+    box.append(bars);
+
+    const failed = finished.filter((lvl) => !run.results[lvl].ok);
+    let basisLabel;
+    if (tokenBasis) {
+      basisLabel = allTokens ? '按思考 token 比较' : '按思考 token 比较，未产生思考的档位按 0 计';
+    } else if (anyTokens) {
+      basisLabel = '按思考字符数比较，部分档位未上报 token，已同时标注可用 token 数';
+    } else {
+      basisLabel = '按思考字符数比较，上游未上报 token';
+    }
+    let verdictKind = 'warn';
+    let verdictText = null;
+
+    if (failed.length) {
+      verdictKind = 'err';
+      verdictText = '有档位请求失败：'
+        + failed.map((lvl) => lvl + '（' + (run.results[lvl].error || '未知错误') + '）').join('；')
+        + '。请先解决失败项再判读差异。';
+    } else if (finished.length < levels.length) {
+      verdictText = '对比尚未完成，当前为已完成档位的初步结果。';
+    } else if (values.every((v) => v === 0)) {
+      verdictText = '各档位都没有返回可观察的思考内容，也没有上报思考 token：无法判断档位是否生效。'
+        + '若上游支持，可在模型配置的 request_overrides 中要求返回思考摘要（例如 Responses 协议加 reasoning.summary=auto），或改用会上报 usage 的服务商。';
+    } else if (new Set(values).size > 1) {
+      verdictKind = 'ok';
+      const descending = levels.slice().sort((a, b) => (
+        values[finished.indexOf(b)] - values[finished.indexOf(a)]
+      ));
+      const detail = descending.map((lvl) => {
+        const index = finished.indexOf(lvl);
+        return lvl + ' ' + (tokenBasis ? values[index] + ' tokens' : values[index] + ' 字符');
+      }).join('，');
+      verdictText = '各档位的思考长度存在差异，档位映射已产生不同效果（' + basisLabel + '）。从长到短：' + detail + '。';
+    } else {
+      verdictText = '各档位的思考长度完全相同：可能是上游不区分这些档位的参数，也可能是映射没有真正改变上游行为。'
+        + '建议核对每个档位“注入到上游请求的参数”，并确认该模型在上游确实区分这些参数。';
+    }
+    box.append(el('div', { class: 'verdict ' + verdictKind, text: verdictText }));
+  }
+
+  function compareRowLabel(tokenValue, value, tokenBasis) {
+    if (tokenBasis) return value + ' tokens';
+    const tokensText = (tokenValue === null || tokenValue === undefined)
+      ? 'tokens 未上报'
+      : tokenValue + ' tokens';
+    return value + ' 字符（' + tokensText + '）';
+  }
+
   // ---------------------------------------------------------- configuration
   let configMode = 'form';
 
@@ -1056,6 +1361,13 @@
     $('#config-tab-raw').classList.toggle('active', mode === 'raw');
     $('#config-form-mode').style.display = mode === 'form' ? '' : 'none';
     $('#config-raw-mode').style.display = mode === 'raw' ? '' : 'none';
+  }
+
+  function switchConsoleTab(mode) {
+    $('#console-tab-single').classList.toggle('active', mode === 'single');
+    $('#console-tab-compare').classList.toggle('active', mode === 'compare');
+    $('#console-single-mode').style.display = mode === 'single' ? '' : 'none';
+    $('#console-compare-mode').style.display = mode === 'compare' ? '' : 'none';
   }
 
   function renderDiff(diff) {
@@ -1375,6 +1687,12 @@
       $('#console-preview-out').textContent = '';
       $('#console-preview-panel').style.display = 'none';
     });
+
+    $('#console-tab-single').addEventListener('click', () => switchConsoleTab('single'));
+    $('#console-tab-compare').addEventListener('click', () => switchConsoleTab('compare'));
+    $('#compare-model').addEventListener('change', renderCompareLevels);
+    $('#compare-send').addEventListener('click', () => runCompare().catch((err) => notify(err.message, 'err')));
+    $('#compare-stop').addEventListener('click', () => { if (compareRun) compareRun.controller.abort(); });
 
     $('#config-tab-form').addEventListener('click', () => switchConfigTab('form'));
     $('#config-tab-raw').addEventListener('click', () => switchConfigTab('raw'));

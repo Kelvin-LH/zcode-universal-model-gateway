@@ -224,6 +224,25 @@ pre.code {
 .diff-list { margin: 8px 0 0; padding-left: 18px; }
 .status-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
+/* ---------- reasoning level comparison ---------- */
+.compare-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+.compare-grid .panel { margin-bottom: 0; }
+.compare-metrics { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.compare-metrics .chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; }
+.compare-metrics .chip strong { font-weight: 650; }
+.compare-label { color: var(--muted); font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
+.compare-text { white-space: pre-wrap; word-break: break-word; font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px; max-height: 220px; overflow: auto; }
+.compare-bars { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 4px; }
+.compare-bar-row { display: grid; grid-template-columns: 96px 1fr 130px; gap: 10px; align-items: center; }
+.compare-bar-label { font-size: 12.5px; }
+.compare-bar-track { background: var(--panel-2); border-radius: 999px; height: 10px; overflow: hidden; }
+.compare-bar { background: var(--accent); height: 100%; border-radius: 999px; min-width: 2px; }
+.compare-bar.pending { background: var(--border); }
+.verdict { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); margin-top: 12px; }
+.verdict.ok { border-color: var(--ok); background: var(--ok-soft); }
+.verdict.warn { border-color: var(--warn); background: var(--warn-soft); }
+.verdict.err { border-color: var(--err); background: var(--err-soft); }
+
 @media (max-width: 760px) {
   #nav-toggle { display: inline-block; }
   .layout { flex-direction: column; }

@@ -29,6 +29,7 @@ ZCode  ──POST /v1/responses (model = deepseek-flash@max)──▶  ZUMG  ─
 - [请求覆盖与删除字段](#请求覆盖与删除字段)
 - [API Key](#api-key)
 - [Web 管理界面](#web-管理界面)
+- [档位对比](#档位对比)
 - [HTTP 接口](#http-接口)
 - [支持的服务商协议](#支持的服务商协议)
 - [安全](#安全)
@@ -50,6 +51,9 @@ ZCode  ──POST /v1/responses (model = deepseek-flash@max)──▶  ZUMG  ─
   崩溃，上一版有效配置会继续服务。
 - 配置写入前先校验，并采用原子替换写入。
 - 内置 HTML 管理界面，不依赖 CDN，无构建步骤。
+- 测试台「档位对比」：同一个问题一次性发给某个模型的全部（或选定的）思考档位，
+  并排比较各档位的思考 token 数、思考字数、首字延迟与耗时，用来验证
+  `模型@档位` 是否真的改变了上游行为（见下方[档位对比](#档位对比)）。
 
 ## 环境要求
 
@@ -421,8 +425,10 @@ export OPENAI_API_KEY="sk-..."        # macOS / Linux
   「保存到本地」（重启后仍有效）或「仅本次会话」，也可「清除 Key」。
 - **模型** — 添加 / 编辑 / 删除 / 复制 / 测试；可动态增删的思考档位行，每行一个
   JSON 映射编辑器；实时预览虚拟模型 ID。
-- **测试台** — 选择一个虚拟模型，以流式或非流式发送；查看经遮蔽处理的请求预览与
-  流式输出；可中断正在进行的请求。
+- **测试台** — 两个模式：
+  - **单次测试**：选择一个虚拟模型，以流式或非流式发送；查看经遮蔽处理的请求预览与
+    流式输出；可中断正在进行的请求。
+  - **档位对比**：见下方[档位对比](#档位对比)。
 - **配置** — 表单模式（通过服务商/模型页面）与原始 YAML 模式，支持校验 / 保存 /
   重新加载 / 下载 / 上传 / 重置为示例。
 - **日志** — 最近 100 条请求（时间、模型、档位、服务商、上游模型、协议、状态、耗时、
@@ -430,6 +436,31 @@ export OPENAI_API_KEY="sk-..."        # macOS / Linux
 - **关于**。
 
 界面会跟随系统亮色/暗色主题，并适配移动端。
+
+## 档位对比
+
+配置好档位之后，你可能想知道`模型@档位`是不是真的生效了。测试台里的
+**档位对比**就是干这个的：填入一个问题，勾选要比较的档位（默认全选），点「开始对比」，
+网关会为每个档位各发送一次相同的请求（并发上限 4，互不影响，某个档位失败不会中断
+其他档位），并把结果并排展示：
+
+- 该档位真正注入到上游请求体的参数（`mapping` 与 `request_overrides`）；
+- 思考 token 数、思考字符数、首个思考片段的到达时间、总耗时、输入/输出 token；
+- 思考内容与回答原文（各截断到 20000 字符）。
+
+顶部汇总条按长度排序展示各档位差异，并给出一句结论：档位是否产生了可观察的不同效果。
+判读依据按可信度排序：
+
+1. **思考 token 数**（最可靠，来自上游 `usage`）；
+2. **思考字符数**（上游没有上报 token 时，用思考文本长度代替）；
+3. 两者都没有时只能看耗时，无法下结论。
+
+两个已知限制：有些中转不返回思考内容，也不上报 `reasoning_tokens`（部分档位未上报
+token 时汇总条会同时标注两者）；Anthropic 协议目前把 `reasoning_tokens` 记为 0。
+所以第一次用某个服务商做对比时，建议先确认它是否返回思考摘要——Responses 协议可在
+模型配置的 `request_overrides` 里加 `reasoning.summary=auto` 要求上游返回思考过程。
+
+注意：**每个档位都是一次真实调用，可能产生费用**。
 
 ## HTTP 接口
 
@@ -445,8 +476,15 @@ export OPENAI_API_KEY="sk-..."        # macOS / Linux
 
 管理接口（`/api/admin/*`）：`status`、`meta`、`logs`、`metrics`、`providers`
 （GET/POST/PUT/DELETE + duplicate/test/temporary-key）、`models`
-（GET/POST/PUT/DELETE + duplicate/test/virtual）、`preview`、`config`
+（GET/POST/PUT/DELETE + duplicate/test/virtual）、`preview`、`compare`、`config`
 （get/validate/save/reload/download/upload/reset-example）。
+
+`POST /api/admin/compare` 是档位对比的后端：请求体
+`{"model":"deepseek-flash","levels":["low","max"],"body":{"input":"…"},"stream":false}`，
+以 NDJSON 流式返回——先 `{"type":"started",…}`，每个档位完成时输出一行
+`{"type":"result",…}`（含 `reasoning_tokens`、`reasoning_chars`、`first_reasoning_ms`、
+`elapsed_ms`、`mapping` 等），最后 `{"type":"done","count":N}`。`levels` 省略表示全部
+档位，`model` 也接受 `模型@档位` 形式（对比始终跨该模型的所有档位）。
 
 错误类型：`unknown_model`、`unknown_reasoning_level`、`provider_disabled`、
 `model_disabled`、`provider_auth_error`、`upstream_timeout`、`upstream_error`、
@@ -500,6 +538,7 @@ gateway/
   merge.py           # deep merge 与安全的嵌套字段删除
   secrets.py         # 本地密钥文件 + 内存临时 Key + 环境变量
   metrics.py         # 内存 metrics 与有界请求日志
+  compare.py         # 档位对比：同一问题跑多个档位并采集思考 token/字数/耗时
   errors.py          # 统一错误类型
   paths.py           # 源码/冻结(exe)两种模式下的路径解析
   adapters/          # openai_responses、openai_chat、anthropic_messages
@@ -533,5 +572,7 @@ Key）同样被 git 忽略。
 - metrics 与日志仅存于内存，重启即清空（属设计预期）。
 - `测试连接` 只执行一次轻量的 `GET /models` 探测，不会触发计费的推理请求。
 - 配置热更新基于文件 mtime，因此文件改动后会在下一次请求时才生效。
+- 档位对比的判读依赖上游返回的数据：不上报 `reasoning_tokens` 且不返回思考内容的上游
+  无法据此确认档位是否生效；Anthropic 协议目前把 `reasoning_tokens` 记为 0。
 - 启动脚本的提示信息保持 ASCII（避免 Windows 批处理的代码页问题），中文启动横幅由
   Python 打印。

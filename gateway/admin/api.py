@@ -11,14 +11,16 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse, Response, StreamingResponse
 
 from .. import __version__
 from ..adapters import supported_protocols
+from ..compare import run_comparison, select_levels
 from ..config import (
     Config,
     ConfigError,
@@ -57,6 +59,13 @@ def require_admin(request: Request) -> None:
 
 def _provider_status(provider: ProviderConfig, secrets: SecretStore, provider_id: str) -> dict:
     return secrets.status(provider_id, provider.api_key_env)
+
+
+def _ndjson(payload: dict[str, Any]) -> bytes:
+    """One line of an NDJSON response stream (encoding is UTF-8, not ASCII)."""
+    return (
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+    ).encode("utf-8")
 
 
 def _provider_dict(provider_id: str, provider: ProviderConfig, secrets: SecretStore) -> dict:
@@ -433,6 +442,54 @@ def build_admin_router(
             return router.preview(model, body)
         except GatewayError as exc:
             raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+
+    # -- reasoning level comparison --------------------------------------
+
+    @api.post("/compare")
+    async def compare_levels(payload: dict = Body(...)) -> StreamingResponse:
+        """Run one prompt across several reasoning levels of a model.
+
+        Streams NDJSON: one ``{"type": "result", ...}`` line per level as it
+        finishes, then ``{"type": "done"}``. This is a real (billable) call per
+        level — the UI labels it as such.
+        """
+        manager.maybe_reload()
+        model_id = str(payload.get("model") or "").strip()
+        if not model_id:
+            raise HTTPException(status_code=400, detail="必须提供 model")
+        # Accept a virtual id (``foo@max``) as well: the comparison always
+        # spans the model's levels, so the alias part is dropped.
+        model_id = model_id.split("@", 1)[0]
+
+        body = payload.get("body")
+        if body is None:
+            body = {}
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="body 必须是 JSON 对象")
+
+        try:
+            levels = select_levels(router, model_id, payload.get("levels"))
+        except GatewayError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.to_dict()) from exc
+
+        stream = bool(payload.get("stream"))
+        await router.startup()
+
+        async def events() -> AsyncIterator[bytes]:
+            yield _ndjson({"type": "started", "model": model_id, "levels": levels})
+            count = 0
+            async for result in run_comparison(
+                router, model_id, levels, body, stream=stream
+            ):
+                count += 1
+                yield _ndjson({"type": "result", **result})
+            yield _ndjson({"type": "done", "model": model_id, "count": count})
+
+        return StreamingResponse(
+            events(),
+            media_type="application/x-ndjson",
+            headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+        )
 
     # -- configuration ---------------------------------------------------
 

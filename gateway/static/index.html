@@ -80,6 +80,12 @@
       <section id="view-console" class="view">
         <h1>测试台</h1>
         <p class="sub">通过网关发送请求，并查看转换后的上游请求内容。</p>
+        <div class="tabs">
+          <button data-tab="single" class="active" id="console-tab-single" type="button">单次测试</button>
+          <button data-tab="compare" id="console-tab-compare" type="button">档位对比</button>
+        </div>
+
+        <div id="console-single-mode">
         <div class="panel">
           <div class="field">
             <label for="console-model">模型</label>
@@ -111,6 +117,42 @@
         <div class="panel">
           <h2>输出</h2>
           <div class="stream-out" id="console-output"></div>
+        </div>
+        </div>
+
+        <div id="console-compare-mode" style="display:none">
+          <div class="panel">
+            <div class="field">
+              <label for="compare-model">模型</label>
+              <select id="compare-model"></select>
+              <div class="hint">只列出配置了思考档位的模型。对比会为每个勾选的档位各发送一次相同的请求。</div>
+            </div>
+            <div class="field">
+              <label>思考档位</label>
+              <div id="compare-levels" class="status-row"></div>
+            </div>
+            <div class="field">
+              <label for="compare-instructions">Instructions（系统指令）</label>
+              <textarea id="compare-instructions" placeholder="可选的系统指令"></textarea>
+            </div>
+            <div class="field">
+              <label for="compare-input">Input（输入）</label>
+              <textarea id="compare-input" style="min-height:120px" placeholder="向所有档位提同一个问题…"></textarea>
+            </div>
+            <div class="status-row mb">
+              <label class="check"><input type="checkbox" id="compare-stream" checked /> 流式请求（可测量首个思考片段的到达时间，并在支持的协议上携带 usage）</label>
+            </div>
+            <div class="inline">
+              <button class="btn primary" id="compare-send" type="button">开始对比</button>
+              <button class="btn" id="compare-stop" type="button" disabled>停止</button>
+            </div>
+            <p class="sub" style="margin:12px 0 0">注意：每个档位都会真实调用一次上游，可能产生费用。判读依据优先看思考 token；上游未上报 token 时退化为思考字符数，两者都缺失时只能参考耗时。若上游默认不返回思考内容，可在模型配置里用 request_overrides 让上游返回思考摘要（例如 Responses 协议的 <span class="mono">reasoning.summary=auto</span>）。</p>
+          </div>
+          <div class="panel" id="compare-summary-panel" style="display:none">
+            <h2>对比</h2>
+            <div id="compare-summary"></div>
+          </div>
+          <div class="compare-grid" id="compare-results"></div>
         </div>
       </section>
 

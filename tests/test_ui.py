@@ -10,8 +10,20 @@ async def test_index_serves_html(build_app, client_factory):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     html = response.text
-    for label in ("服务商", "模型", "测试台", "配置"):
+    for label in ("服务商", "模型", "测试台", "配置", "单次测试", "档位对比"):
         assert label in html
+
+
+async def test_compare_ui_present_in_assets(build_app, client_factory):
+    """The comparison view is wired: tab, level list and API call."""
+    harness = build_app()
+    client = client_factory(harness.app)
+    html = (await client.get("/")).text
+    for element_id in ("console-tab-compare", "compare-model", "compare-levels", "compare-send"):
+        assert 'id="' + element_id + '"' in html
+    js = (await client.get("/static/app.js")).text
+    assert "/api/admin/compare" in js
+    assert "switchConsoleTab" in js
 
 
 async def test_ui_alias_serves_html(build_app, client_factory):
