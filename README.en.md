@@ -59,7 +59,8 @@ ZCode  ──POST /v1/responses (model = deepseek-flash@max)──▶  ZUMG  ─
   A broken config never takes the gateway down; the last known-good config keeps
   serving.
 - Configs are validated before being written, using atomic replacement.
-- Built-in HTML admin UI: no CDN, no build step.
+- Built-in HTML admin UI: no CDN, no build step, switchable between Chinese and
+  English (the switch also drives backend error messages).
 - Test Console **Level Comparison**: send one question to all (or selected)
   reasoning levels of a model at once and compare reasoning token counts,
   reasoning length, time-to-first-reasoning and latency side by side, to verify
@@ -452,8 +453,10 @@ clear error:
 
 ## Web Admin UI
 
-Open <http://127.0.0.1:8787/> (or `/ui`). The UI itself is in Chinese; the page
-names below are English renderings of the on-screen labels. Pages:
+Open <http://127.0.0.1:8787/> (or `/ui`). The UI ships in Chinese and English —
+use the language button in the top-right corner to switch (the choice is
+remembered, and backend error messages follow it too). The page names below are
+the English renderings of the on-screen labels. Pages:
 
 - **Dashboard** — runtime status, counts, the ZCode Base URL (with copy button),
   recent requests/errors.

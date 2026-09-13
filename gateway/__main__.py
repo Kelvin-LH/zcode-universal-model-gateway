@@ -10,6 +10,7 @@ from pathlib import Path
 import uvicorn
 
 from .app import HOST_ENV, PORT_ENV, create_app
+from .i18n import tr
 from .paths import app_dir, example_config_path, is_frozen
 
 DEFAULT_HOST = "127.0.0.1"
@@ -51,7 +52,7 @@ def ensure_config(path: str) -> None:
         if example.is_file():
             shutil.copyfile(example, target)
             logging.getLogger("zumg").info(
-                "已从 %s 生成 %s", example.name, target.name
+                tr("startup.generated_config", example=example.name, target=target.name)
             )
             return
 
@@ -67,10 +68,10 @@ def print_banner(host: str, port: int) -> None:
     print(line)
     print("  ZCode Universal Model Gateway")
     print("-" * 58)
-    print(f"  管理界面  : http://{host}:{port}/")
-    print(f"  ZCode 地址: http://{host}:{port}/v1")
+    print(tr("banner.admin_ui", url=f"http://{host}:{port}/"))
+    print(tr("banner.zcode_url", url=f"http://{host}:{port}/v1"))
     print("-" * 58)
-    print("  按 Ctrl+C 停止服务。")
+    print(tr("banner.stop"))
     print(line)
     print(flush=True)
 

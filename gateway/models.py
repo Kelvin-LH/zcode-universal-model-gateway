@@ -16,6 +16,7 @@ from .errors import (
     UnknownModelError,
     UnknownReasoningLevelError,
 )
+from .i18n import tr
 from .merge import deep_merge, remove_path
 
 SEPARATOR = "@"
@@ -126,26 +127,30 @@ def split_alias(requested: str) -> tuple[str, str | None]:
 def resolve_model(config: Config, requested: str) -> ResolvedModel:
     """Resolve a client-supplied model id against the active config."""
     if not requested:
-        raise UnknownModelError("请求中没有提供 model 参数")
+        raise UnknownModelError(tr("model.none_in_request"))
 
     base, level = split_alias(requested)
     model = config.models.get(base)
     if model is None:
-        raise UnknownModelError(f"未知模型 {requested!r}")
+        raise UnknownModelError(tr("model.unknown", model=requested))
 
     if not model.enabled:
-        raise ModelDisabledError(f"模型 {base!r} 已被禁用")
+        raise ModelDisabledError(tr("model.disabled", model=base))
 
     reasoning = model.reasoning
     if level is not None:
         if not reasoning or not reasoning.enabled:
             raise UnknownReasoningLevelError(
-                f"模型 {base!r} 不支持思考档位"
+                tr("model.no_reasoning", model=base)
             )
         if level not in reasoning.supported:
             raise UnknownReasoningLevelError(
-                f"模型 {base!r} 不支持思考档位 {level!r}；"
-                f"支持的档位：{', '.join(reasoning.supported)}"
+                tr(
+                    "model.level_unsupported",
+                    model=base,
+                    level=level,
+                    supported=", ".join(reasoning.supported),
+                )
             )
     else:
         level = reasoning.default if reasoning and reasoning.enabled else None
@@ -153,10 +158,10 @@ def resolve_model(config: Config, requested: str) -> ResolvedModel:
     provider = config.providers.get(model.provider)
     if provider is None:
         raise UnknownModelError(
-            f"模型 {base!r} 引用了不存在的服务商 {model.provider!r}"
+            tr("model.unknown_provider", model=base, provider=model.provider)
         )
     if not provider.enabled:
-        raise ProviderDisabledError(f"服务商 {model.provider!r} 已被禁用")
+        raise ProviderDisabledError(tr("provider.disabled", provider=model.provider))
 
     endpoint_kind = {
         "openai_responses": "responses",

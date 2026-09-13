@@ -18,11 +18,13 @@ from fastapi.responses import (
     Response,
     StreamingResponse,
 )
+from starlette.datastructures import Headers
 
 from . import __version__
 from .admin.api import build_admin_router
 from .config import ConfigManager
 from .errors import GatewayError, UnknownModelError, UpstreamError
+from .i18n import reset_locale, resolve_locale, set_locale, tr
 from .metrics import Metrics
 from .models import list_models, resolve_model
 from .paths import static_dir
@@ -62,11 +64,13 @@ def create_app(
         manager.load_or_default()
         await router.startup()
         log.info(
-            "ZUMG %s 已启动；配置=%s 服务商=%d 模型=%d",
-            __version__,
-            path,
-            len(manager.config.providers),
-            len(manager.config.models),
+            tr(
+                "app.started",
+                version=__version__,
+                config=path,
+                providers=len(manager.config.providers),
+                models=len(manager.config.models),
+            )
         )
         try:
             yield
@@ -83,6 +87,28 @@ def create_app(
     app.state.metrics = metrics
     app.state.router = router
     app.state.config_path = str(path)
+
+    # -- locale ----------------------------------------------------------
+    #
+    # Plain ASGI middleware, not BaseHTTPMiddleware: the locale span has to
+    # cover the whole request including streaming bodies, since messages raised
+    # while a stream is produced still need the request's language.
+    class LocaleMiddleware:
+        def __init__(self, asgi_app) -> None:
+            self.app = asgi_app
+
+        async def __call__(self, scope, receive, send) -> None:
+            if scope["type"] != "http":
+                await self.app(scope, receive, send)
+                return
+            headers = Headers(scope=scope)
+            token = set_locale(resolve_locale(headers.get("accept-language")))
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                reset_locale(token)
+
+    app.add_middleware(LocaleMiddleware)
 
     # -- error handling --------------------------------------------------
 
@@ -109,7 +135,7 @@ def create_app(
             content={
                 "error": {
                     "type": "internal_error",
-                    "message": "发生了未预期的内部错误",
+                    "message": tr("app.internal_error"),
                 }
             },
         )
@@ -150,7 +176,7 @@ def create_app(
         body = await _json_body(request)
         model = body.get("model")
         if not model:
-            raise UnknownModelError("请求中没有提供 model 参数")
+            raise UnknownModelError(tr("model.none_in_request"))
 
         if body.get("stream"):
             # Resolve and validate before the response starts so auth/model
@@ -182,7 +208,7 @@ def create_app(
         body = await _json_body(request)
         model = body.get("model")
         if not model:
-            raise UnknownModelError("请求中没有提供 model 参数")
+            raise UnknownModelError(tr("model.none_in_request"))
         # Present the body as a Responses request so adapters can consume it.
         responses_body = dict(body)
         if "input" not in responses_body and body.get("messages") is not None:
@@ -243,11 +269,11 @@ async def _json_body(request: Request) -> dict[str, Any]:
     except Exception as exc:
         from .errors import AdapterError
 
-        raise AdapterError(f"请求体必须是合法 JSON：{exc}") from exc
+        raise AdapterError(tr("app.bad_json", error=exc)) from exc
     if not isinstance(body, dict):
         from .errors import AdapterError
 
-        raise AdapterError("请求体必须是一个 JSON 对象")
+        raise AdapterError(tr("app.body_not_object"))
     return body
 
 

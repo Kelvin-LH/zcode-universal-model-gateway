@@ -31,6 +31,7 @@ from ..config import (
     parse_config,
 )
 from ..errors import GatewayError
+from ..i18n import tr
 from ..metrics import Metrics
 from ..router import Router, test_connection
 from ..secrets import SecretStore
@@ -54,7 +55,7 @@ def require_admin(request: Request) -> None:
         if auth.lower().startswith("bearer "):
             supplied = auth[7:].strip()
     if not supplied or supplied != expected:
-        raise HTTPException(status_code=401, detail="需要有效的管理 Token，或 Token 不正确")
+        raise HTTPException(status_code=401, detail=tr("admin.token_required"))
 
 
 def _provider_status(provider: ProviderConfig, secrets: SecretStore, provider_id: str) -> dict:
@@ -175,13 +176,13 @@ def build_admin_router(
     async def create_provider(payload: dict = Body(...)) -> dict[str, Any]:
         provider_id = str(payload.pop("id", "") or "").strip()
         if not provider_id:
-            raise HTTPException(status_code=400, detail="服务商 ID 不能为空")
+            raise HTTPException(status_code=400, detail=tr("provider.id_empty"))
         if "@" in provider_id:
-            raise HTTPException(status_code=400, detail="服务商 ID 不能包含 '@'")
+            raise HTTPException(status_code=400, detail=tr("provider.id_at"))
 
         def mutate(config: Config) -> None:
             if provider_id in config.providers:
-                raise HTTPException(status_code=409, detail="该服务商已存在")
+                raise HTTPException(status_code=409, detail=tr("provider.exists"))
             config.providers[provider_id] = _validate_provider(payload)
 
         manager.update(mutate)
@@ -193,7 +194,7 @@ def build_admin_router(
         def mutate(config: Config) -> None:
             existing = config.providers.get(provider_id)
             if existing is None:
-                raise HTTPException(status_code=404, detail="找不到该服务商")
+                raise HTTPException(status_code=404, detail=tr("provider.not_found"))
             merged = existing.model_dump(mode="json")
             merged.update({k: v for k, v in payload.items() if k != "id"})
             config.providers[provider_id] = _validate_provider(merged)
@@ -214,7 +215,7 @@ def build_admin_router(
         """
         config = manager.config
         if provider_id not in config.providers:
-            raise HTTPException(status_code=404, detail="找不到该服务商")
+            raise HTTPException(status_code=404, detail=tr("provider.not_found"))
         used_by = [
             mid for mid, model in config.models.items() if model.provider == provider_id
         ]
@@ -222,8 +223,7 @@ def build_admin_router(
             raise HTTPException(
                 status_code=409,
                 detail=(
-                    f"该服务商仍被以下模型引用：{', '.join(used_by)}。"
-                    "请先删除这些模型，或选择连同它们一起删除。"
+                    tr("provider.in_use", models=", ".join(used_by))
                 ),
             )
 
@@ -243,10 +243,10 @@ def build_admin_router(
         config = manager.config
         source = config.providers.get(provider_id)
         if source is None:
-            raise HTTPException(status_code=404, detail="找不到该服务商")
+            raise HTTPException(status_code=404, detail=tr("provider.not_found"))
         new_id = str(payload.get("id") or f"{provider_id}-copy").strip()
         if new_id in config.providers:
-            raise HTTPException(status_code=409, detail="目标服务商 ID 已存在")
+            raise HTTPException(status_code=409, detail=tr("provider.target_exists"))
         data = source.model_dump(mode="json")
         data["display_name"] = f"{source.display_name} (copy)"
 
@@ -262,7 +262,7 @@ def build_admin_router(
         config = manager.config
         provider = config.providers.get(provider_id)
         if provider is None:
-            raise HTTPException(status_code=404, detail="找不到该服务商")
+            raise HTTPException(status_code=404, detail=tr("provider.not_found"))
         await router.startup()
         return await test_connection(provider, secrets, provider_id, router.client)
 
@@ -278,7 +278,7 @@ def build_admin_router(
         """
         provider = manager.config.providers.get(provider_id)
         if provider is None:
-            raise HTTPException(status_code=404, detail="找不到该服务商")
+            raise HTTPException(status_code=404, detail=tr("provider.not_found"))
         key = str(payload.get("api_key") or "")
         persist = bool(payload.get("persist"))
         if persist:
@@ -307,7 +307,7 @@ def build_admin_router(
     @api.put("/providers/{provider_id}/temporary-key")
     async def set_temporary_key(provider_id: str, payload: dict = Body(...)) -> dict[str, Any]:
         if provider_id not in manager.config.providers:
-            raise HTTPException(status_code=404, detail="找不到该服务商")
+            raise HTTPException(status_code=404, detail=tr("provider.not_found"))
         key = payload.get("api_key") or ""
         secrets.set_temporary(provider_id, str(key))
         return {
@@ -336,13 +336,13 @@ def build_admin_router(
     async def create_model(payload: dict = Body(...)) -> dict[str, Any]:
         model_id = str(payload.pop("id", "") or "").strip()
         if not model_id:
-            raise HTTPException(status_code=400, detail="模型 ID 不能为空")
+            raise HTTPException(status_code=400, detail=tr("model.id_empty"))
         if "@" in model_id:
-            raise HTTPException(status_code=400, detail="模型 ID 不能包含 '@'")
+            raise HTTPException(status_code=400, detail=tr("model.id_at"))
 
         def mutate(config: Config) -> None:
             if model_id in config.models:
-                raise HTTPException(status_code=409, detail="该模型已存在")
+                raise HTTPException(status_code=409, detail=tr("model.exists"))
             config.models[model_id] = _validate_model(payload, config)
 
         manager.update(mutate)
@@ -355,7 +355,7 @@ def build_admin_router(
         def mutate(config: Config) -> None:
             existing = config.models.get(model_id)
             if existing is None:
-                raise HTTPException(status_code=404, detail="找不到该模型")
+                raise HTTPException(status_code=404, detail=tr("model.not_found"))
             merged = existing.model_dump(mode="json")
             merged.update({k: v for k, v in payload.items() if k != "id"})
             config.models[model_id] = _validate_model(merged, config)
@@ -369,7 +369,7 @@ def build_admin_router(
     async def delete_model(model_id: str) -> dict[str, Any]:
         def mutate(config: Config) -> None:
             if model_id not in config.models:
-                raise HTTPException(status_code=404, detail="找不到该模型")
+                raise HTTPException(status_code=404, detail=tr("model.not_found"))
             del config.models[model_id]
 
         manager.update(mutate)
@@ -382,10 +382,10 @@ def build_admin_router(
         config = manager.config
         source = config.models.get(model_id)
         if source is None:
-            raise HTTPException(status_code=404, detail="找不到该模型")
+            raise HTTPException(status_code=404, detail=tr("model.not_found"))
         new_id = str(payload.get("id") or f"{model_id}-copy").strip()
         if new_id in config.models:
-            raise HTTPException(status_code=409, detail="目标模型 ID 已存在")
+            raise HTTPException(status_code=409, detail=tr("model.target_exists"))
         data = source.model_dump(mode="json")
         data["display_name"] = f"{source.display_name} (copy)"
 
@@ -402,10 +402,10 @@ def build_admin_router(
         manager.maybe_reload()
         model = manager.config.models.get(model_id)
         if model is None:
-            raise HTTPException(status_code=404, detail="找不到该模型")
+            raise HTTPException(status_code=404, detail=tr("model.not_found"))
         provider = manager.config.providers.get(model.provider)
         if provider is None:
-            raise HTTPException(status_code=409, detail="找不到该模型所属的服务商")
+            raise HTTPException(status_code=409, detail=tr("model.provider_not_found"))
         await router.startup()
         result = await test_connection(provider, secrets, model.provider, router.client)
         result["model"] = model_id
@@ -417,7 +417,7 @@ def build_admin_router(
         config = manager.config
         model = config.models.get(model_id)
         if model is None:
-            raise HTTPException(status_code=404, detail="找不到该模型")
+            raise HTTPException(status_code=404, detail=tr("model.not_found"))
         virtual = [model_id]
         if model.reasoning and model.reasoning.supported:
             virtual += [f"{model_id}@{lvl}" for lvl in model.reasoning.supported]
@@ -430,7 +430,7 @@ def build_admin_router(
         model = payload.get("model")
         body = payload.get("body") or payload.get("input")
         if not model:
-            raise HTTPException(status_code=400, detail="必须提供 model")
+            raise HTTPException(status_code=400, detail=tr("request.model_required"))
         if isinstance(body, str):
             body = {"model": model, "input": body}
         elif body is None:
@@ -456,7 +456,7 @@ def build_admin_router(
         manager.maybe_reload()
         model_id = str(payload.get("model") or "").strip()
         if not model_id:
-            raise HTTPException(status_code=400, detail="必须提供 model")
+            raise HTTPException(status_code=400, detail=tr("request.model_required"))
         # Accept a virtual id (``foo@max``) as well: the comparison always
         # spans the model's levels, so the alias part is dropped.
         model_id = model_id.split("@", 1)[0]
@@ -465,7 +465,7 @@ def build_admin_router(
         if body is None:
             body = {}
         if not isinstance(body, dict):
-            raise HTTPException(status_code=400, detail="body 必须是 JSON 对象")
+            raise HTTPException(status_code=400, detail=tr("app.body_not_object"))
 
         try:
             levels = select_levels(router, model_id, payload.get("levels"))
@@ -506,7 +506,7 @@ def build_admin_router(
     async def validate_config(payload: dict = Body(...)) -> dict[str, Any]:
         text = payload.get("yaml")
         if text is None:
-            raise HTTPException(status_code=400, detail="必须提供 'yaml' 字段")
+            raise HTTPException(status_code=400, detail=tr("request.yaml_required"))
         try:
             new_config = load_config_text(text)
         except ConfigError as exc:
@@ -521,7 +521,7 @@ def build_admin_router(
     async def save_config(payload: dict = Body(...)) -> dict[str, Any]:
         text = payload.get("yaml")
         if text is None:
-            raise HTTPException(status_code=400, detail="必须提供 'yaml' 字段")
+            raise HTTPException(status_code=400, detail=tr("request.yaml_required"))
         try:
             new_config = load_config_text(text)
         except ConfigError as exc:
@@ -550,7 +550,7 @@ def build_admin_router(
     async def upload_config(payload: dict = Body(...)) -> dict[str, Any]:
         text = payload.get("yaml")
         if text is None:
-            raise HTTPException(status_code=400, detail="必须提供 'yaml' 字段")
+            raise HTTPException(status_code=400, detail=tr("request.yaml_required"))
         try:
             new_config = load_config_text(text)
         except ConfigError as exc:
@@ -565,7 +565,7 @@ def build_admin_router(
     async def reset_example() -> dict[str, Any]:
         example = Path(manager.path).parent / "config.example.yaml"
         if not example.exists():
-            raise HTTPException(status_code=404, detail="找不到 config.example.yaml")
+            raise HTTPException(status_code=404, detail=tr("config.example_not_found"))
         manager.save_text(example.read_text(encoding="utf-8"))
         return {"reset": True}
 
@@ -609,11 +609,11 @@ def build_admin_router(
         if payload.get("format") != BUNDLE_FORMAT:
             raise HTTPException(
                 status_code=400,
-                detail="不是有效的完整备份文件（缺少 format 标记）",
+                detail=tr("bundle.bad_format"),
             )
         config_data = payload.get("config")
         if not isinstance(config_data, dict):
-            raise HTTPException(status_code=400, detail="备份文件缺少 config 内容")
+            raise HTTPException(status_code=400, detail=tr("bundle.no_config"))
 
         previous = manager.config
         try:
@@ -623,7 +623,7 @@ def build_admin_router(
 
         keys = payload.get("keys") or {}
         if not isinstance(keys, dict):
-            raise HTTPException(status_code=400, detail="备份文件的 keys 字段格式不正确")
+            raise HTTPException(status_code=400, detail=tr("bundle.bad_keys"))
 
         # Validate keys belong to providers that exist in the restored config,
         # so a hand-edited backup cannot introduce orphaned credentials.
@@ -631,7 +631,7 @@ def build_admin_router(
         if unknown:
             raise HTTPException(
                 status_code=400,
-                detail="备份文件包含配置中不存在的服务商 Key：" + ", ".join(map(str, unknown)),
+                detail=tr("bundle.foreign_keys", providers=", ".join(map(str, unknown))),
             )
 
         manager.save_config(new_config)
@@ -654,16 +654,16 @@ def _validate_provider(data: dict) -> ProviderConfig:
     try:
         return ProviderConfig.model_validate(data)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"服务商配置无效：{exc}") from exc
+        raise HTTPException(status_code=400, detail=tr("provider.invalid_config", error=exc)) from exc
 
 
 def _validate_model(data: dict, config: Config) -> ModelConfig:
     provider = data.get("provider")
     if provider and provider not in config.providers:
         raise HTTPException(
-            status_code=400, detail=f"未知的服务商 {provider!r}"
+            status_code=400, detail=tr("provider.unknown", provider=provider)
         )
     try:
         return ModelConfig.model_validate(data)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"模型配置无效：{exc}") from exc
+        raise HTTPException(status_code=400, detail=tr("model.invalid_config", error=exc)) from exc

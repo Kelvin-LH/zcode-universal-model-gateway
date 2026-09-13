@@ -23,6 +23,7 @@ from .adapters import get_adapter
 from .adapters.base import require_api_key
 from .config import ConfigManager, ProviderConfig
 from .errors import GatewayError, UpstreamError, UpstreamTimeoutError
+from .i18n import tr
 from .metrics import Metrics, RequestRecord
 from .models import ResolvedModel, resolve_model
 from .secrets import SecretStore
@@ -183,15 +184,15 @@ class Router:
         except httpx.TimeoutException as exc:
             error_type = "upstream_timeout"
             raise UpstreamTimeoutError(
-                f"上游服务商 {resolved.provider_id!r} 请求超时"
+                tr("upstream.timeout", provider=resolved.provider_id)
             ) from exc
         except httpx.HTTPError as exc:
             error_type = "upstream_error"
-            raise UpstreamError(f"上游请求失败：{exc}") from exc
+            raise UpstreamError(tr("upstream.request_failed", error=exc)) from exc
         except json.JSONDecodeError as exc:
             error_type = "adapter_error"
             raise UpstreamError(
-                "上游返回的响应体不是合法 JSON"
+                tr("upstream.invalid_json")
             ) from exc
         finally:
             latency = (time.perf_counter() - started) * 1000
@@ -258,7 +259,7 @@ class Router:
     def _raise_upstream_error(response: httpx.Response) -> None:
         body = response.content
         content_type = response.headers.get("content-type")
-        message = f"上游返回 HTTP {response.status_code}"
+        message = tr("upstream.http_error", status=response.status_code)
         try:
             parsed = json.loads(body.decode("utf-8", "replace"))
             if isinstance(parsed, dict):

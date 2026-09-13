@@ -20,6 +20,7 @@ from collections.abc import AsyncIterator, Iterable
 from typing import Any
 
 from .errors import GatewayError, UnknownModelError, UnknownReasoningLevelError
+from .i18n import tr
 from .router import RequestPlan, Router
 
 #: Reasoning text is handed to the UI for inspection, but a pathological
@@ -47,7 +48,7 @@ def select_levels(
     """
     model = router.config_manager.config.models.get(model_id)
     if model is None:
-        raise UnknownModelError(f"未知模型 {model_id!r}")
+        raise UnknownModelError(tr("model.unknown", model=model_id))
 
     reasoning = model.reasoning
     supported = list(reasoning.supported) if reasoning and reasoning.enabled else []
@@ -55,7 +56,7 @@ def select_levels(
     if levels is None:
         if not supported:
             raise GatewayError(
-                f"模型 {model_id!r} 没有配置思考档位，无法对比",
+                tr("compare.no_levels", model=model_id),
                 error_type="no_reasoning_levels",
                 status_code=409,
             )
@@ -68,13 +69,17 @@ def select_levels(
             continue
         if name not in supported:
             raise UnknownReasoningLevelError(
-                f"模型 {model_id!r} 不支持思考档位 {name!r}；"
-                f"支持的档位：{', '.join(supported) if supported else '（无）'}"
+                tr(
+                    "model.level_unsupported",
+                    model=model_id,
+                    level=name,
+                    supported=", ".join(supported) or tr("common.none"),
+                )
             )
         selected.append(name)
     if not selected:
         raise GatewayError(
-            "没有选择任何思考档位",
+            tr("compare.no_levels_selected"),
             error_type="no_reasoning_levels",
             status_code=400,
         )
@@ -223,7 +228,7 @@ class _StreamCollector:
             if etype == "response.failed":
                 err = response.get("error")
                 message = err.get("message") if isinstance(err, dict) else None
-                self.error = message or "上游返回 response.failed"
+                self.error = message or tr("compare.upstream_failed")
             # A relay that omits deltas may still send the finished text.
             if not self._reasoning or not self._answer:
                 reasoning, answer = _text_from_output_items(response)

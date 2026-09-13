@@ -2,11 +2,126 @@
  * Plain JavaScript, no build step, no external dependencies.
  * All dynamic content is inserted through DOM nodes / textContent to avoid XSS.
  * NOTE: code identifiers and comments stay English for reuse; user-facing
- * strings are Chinese.
+ * strings are written in Chinese and translated at runtime by the i18n layer
+ * below (see /static/i18n.js).
  */
 'use strict';
 
 (function () {
+  // ------------------------------------------------------------------ i18n
+  //
+  // Chinese is the source language: every user-facing string in this file is
+  // written in Chinese, and `t()` maps it to the active language at render
+  // time. English comes from a lookup table generated from the English
+  // edition; unknown strings (model names, provider ids, upstream output,
+  // user input) pass through untouched.
+  //
+  // Switching re-renders the current view instead of patching the DOM, so
+  // every dynamic label is translated without tracking each node.
+  const LANG_KEY = 'zumg_lang';
+
+  const i18n = {
+    lang: (function () {
+      const stored = localStorage.getItem(LANG_KEY);
+      if (stored === 'zh' || stored === 'en') return stored;
+      return (navigator.language || '').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+    })(),
+    // Longest-first, so a more specific key wins over a shorter one that
+    // happens to share a prefix.
+    prefixes: [],
+  };
+
+  (function initPrefixes() {
+    const table = (window.ZUMG_I18N && window.ZUMG_I18N.zhToEn) || {};
+    i18n.prefixes = Object.keys(table).sort((a, b) => b.length - a.length);
+  })();
+
+  function t(text) {
+    if (i18n.lang !== 'en' || typeof text !== 'string' || !text) return text;
+    const table = (window.ZUMG_I18N && window.ZUMG_I18N.zhToEn) || {};
+    if (Object.prototype.hasOwnProperty.call(table, text)) return table[text];
+    // Messages are often built by concatenation ('复制失败：' + detail), so
+    // fall back to translating the longest known prefix. Dynamic values are
+    // rarely Chinese, which keeps accidental rewrites unlikely; a miss simply
+    // leaves the text as-is.
+    for (const key of i18n.prefixes) {
+      if (text.length > key.length && text.startsWith(key)) {
+        return table[key] + text.slice(key.length);
+      }
+    }
+    return text;
+  }
+
+  function translateTo(text, lang) {
+    if (lang === 'zh' || typeof text !== 'string' || !text) return text;
+    const table = (window.ZUMG_I18N && window.ZUMG_I18N.zhToEn) || {};
+    return Object.prototype.hasOwnProperty.call(table, text) ? table[text] : text;
+  }
+
+  function setLang(lang) {
+    if (lang !== 'zh' && lang !== 'en') return;
+    if (lang === i18n.lang) return;
+    i18n.lang = lang;
+    try { localStorage.setItem(LANG_KEY, lang); } catch (e) { /* private mode */ }
+    renderStaticText();
+    updateLangToggle();
+    // Re-render the active view so its dynamic strings pick up the language.
+    const active = document.querySelector('#sidebar a.active');
+    if (active) showView(active.dataset.view);
+  }
+
+  function updateLangToggle() {
+    const button = document.getElementById('lang-toggle');
+    if (!button) return;
+    // Label shows the language you would switch TO.
+    button.textContent = i18n.lang === 'zh' ? 'English' : '中文';
+    button.title = i18n.lang === 'zh' ? 'Switch to English' : '切换到中文';
+    document.documentElement.lang = i18n.lang === 'zh' ? 'zh-CN' : 'en';
+  }
+
+  // -- static markup translation ------------------------------------------
+  //
+  // index.html is written in Chinese. Rather than tagging every node, the
+  // original text of each translatable node is recorded once at startup and
+  // re-rendered on every language switch, which keeps both directions exact.
+  const staticTextNodes = [];   // {node, source}
+  const staticAttrNodes = [];   // {node, attr, source}
+
+  const CJK_RE = /[\u4e00-\u9fff]/;
+
+  function collectStaticText(root) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (node.nodeValue && CJK_RE.test(node.nodeValue)) {
+        staticTextNodes.push({ node: node, source: node.nodeValue });
+      }
+    }
+    root.querySelectorAll('[placeholder], [title], [aria-label]').forEach((el) => {
+      ['placeholder', 'title', 'aria-label'].forEach((attr) => {
+        const value = el.getAttribute(attr);
+        if (value && CJK_RE.test(value)) {
+          staticAttrNodes.push({ node: el, attr: attr, source: value });
+        }
+      });
+    });
+  }
+
+  function renderStaticText() {
+    // Swap only the text around the original whitespace, so indentation in
+    // the markup is preserved.
+    staticTextNodes.forEach((entry) => {
+      const original = entry.source;
+      const lead = original.match(/^\s*/)[0];
+      const trail = original.match(/\s*$/)[0];
+      const core = original.slice(lead.length, original.length - trail.length);
+      entry.node.nodeValue = lead + translateTo(core, i18n.lang) + trail;
+    });
+    staticAttrNodes.forEach((entry) => {
+      entry.node.setAttribute(entry.attr, translateTo(entry.source, i18n.lang));
+    });
+  }
+
   // ---------------------------------------------------------------- state
   const state = {
     token: sessionStorage.getItem('zumg_token') || '',
@@ -26,7 +141,7 @@
         const value = attrs[key];
         if (value === null || value === undefined || value === false) continue;
         if (key === 'class') node.className = value;
-        else if (key === 'text') node.textContent = value;
+        else if (key === 'text') node.textContent = t(value);
         else if (key === 'value') node.value = value;
         else if (key === 'checked') node.checked = true;
         else if (key === 'disabled') node.disabled = true;
@@ -34,12 +149,14 @@
           node.addEventListener(key.slice(2).toLowerCase(), value);
         } else if (key === 'dataset') {
           for (const dk of Object.keys(value)) node.dataset[dk] = value[dk];
+        } else if (key === 'placeholder' || key === 'title' || key === 'aria-label') {
+          node.setAttribute(key, t(value));
         } else node.setAttribute(key, value);
       }
     }
     for (const child of children.flat(Infinity)) {
       if (child === null || child === undefined || child === false) continue;
-      node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+      node.append(child instanceof Node ? child : document.createTextNode(t(String(child))));
     }
     return node;
   }
@@ -104,7 +221,7 @@
 
   async function api(path, options) {
     options = options || {};
-    const headers = { accept: 'application/json' };
+    const headers = { accept: 'application/json', 'accept-language': i18n.lang };
     if (state.token) headers['x-admin-token'] = state.token;
     let payload;
     if (options.body !== undefined) {
@@ -190,7 +307,7 @@
     );
 
     const statusBadge = $('#config-status');
-    statusBadge.textContent = data.config_valid ? '配置：正常' : '配置：无效';
+    statusBadge.textContent = t(data.config_valid ? '配置：正常' : '配置：无效');
     statusBadge.className = 'badge ' + (data.config_valid ? 'ok' : 'err');
 
     renderRecent($('#dash-recent'), data.recent_requests, false);
@@ -430,8 +547,8 @@
     try {
       const result = await api('/api/admin/providers/' + encodeURIComponent(provider.id) + '/test', { method: 'POST' });
       if (result.ok) {
-        notify('成功 — HTTP ' + result.status + '，用时 ' + result.latency_ms + ' ms' +
-          (result.model_count != null ? '（' + result.model_count + ' 个模型）' : ''), 'ok');
+        notify(t('成功 — HTTP ') + result.status + t('，用时 ') + result.latency_ms + ' ms' +
+          (result.model_count != null ? t('（') + result.model_count + t(' 个模型）') : ''), 'ok');
       } else {
         notify('失败 — ' + (result.error || ('HTTP ' + result.status)), 'err');
       }
@@ -467,11 +584,11 @@
     let cascade = false;
     if (usedBy.length) {
       cascade = window.confirm(
-        '服务商“' + provider.id + '”被以下模型引用：' + usedBy.join('、') +
-        '。\n\n点击“确定”将连同这些模型一起删除；点击“取消”则不删除任何内容。'
+        t('服务商“') + provider.id + t('”被以下模型引用：') + usedBy.join(t('、')) +
+        t('。\n\n点击“确定”将连同这些模型一起删除；点击“取消”则不删除任何内容。')
       );
       if (!cascade) return;
-    } else if (!window.confirm('确定删除服务商“' + provider.id + '”吗？此操作不可撤销。')) {
+    } else if (!window.confirm(t('确定删除服务商“') + provider.id + t('”吗？此操作不可撤销。'))) {
       return;
     }
 
@@ -480,7 +597,7 @@
         (cascade ? '?cascade=true' : '');
       const result = await api(path, { method: 'DELETE' });
       const removed = (result && result.deleted_models) || [];
-      notify(removed.length ? '已删除服务商及 ' + removed.length + ' 个模型' : '已删除', 'ok');
+      notify(removed.length ? t('已删除服务商及 ') + removed.length + t(' 个模型') : t('已删除'), 'ok');
       loadProviders();
     } catch (err) { notify(err.message, 'err'); }
   }
@@ -710,11 +827,11 @@
         jsonWrap.style.display = isCustom ? '' : 'none';
         valueInput.placeholder = preset.valueHint || '';
         if (isCustom) {
-          fieldHint.textContent = '直接写入下面这段 JSON（会 deep merge 进上游请求体）。';
+          fieldHint.textContent = t('直接写入下面这段 JSON（会 deep merge 进上游请求体）。');
         } else {
           const sample = valueInput.value.trim() || (preset.valueHint || '').replace('例如 ', '') || '值';
           const preview = preset.build ? JSON.stringify(preset.build(toNumberIfNumeric(sample))) : '';
-          fieldHint.textContent = (preset.hint || '') + (preview ? '　→ 将写入 ' + preview : '');
+          fieldHint.textContent = t((preset.hint || '') + (preview ? '　→ 将写入 ' + preview : ''));
         }
       }
       fieldSelect.addEventListener('change', syncFields);
@@ -827,7 +944,7 @@
                     try {
                       mapping[lvl] = JSON.parse(raw);
                     } catch (err) {
-                      throw new Error('档位“' + lvl + '”的自定义 JSON 不是合法 JSON：' + err.message);
+                      throw new Error(t('档位“') + lvl + t('”的自定义 JSON 不是合法 JSON：') + err.message);
                     }
                   }
                 } else {
@@ -875,8 +992,8 @@
     notify('正在测试 ' + model.id + '…');
     try {
       const result = await api('/api/admin/models/' + encodeURIComponent(model.id) + '/test', { method: 'POST' });
-      if (result.ok) notify('成功 — HTTP ' + result.status + '，用时 ' + result.latency_ms + ' ms', 'ok');
-      else notify('失败 — ' + (result.error || ('HTTP ' + result.status)), 'err');
+      if (result.ok) notify(t('成功 — HTTP ') + result.status + t('，用时 ') + result.latency_ms + ' ms', 'ok');
+      else notify(t('失败 — ') + (result.error || ('HTTP ' + result.status)), 'err');
     } catch (err) { notify(err.message, 'err'); }
   }
 
@@ -899,7 +1016,7 @@
   }
 
   async function deleteModel(model) {
-    if (!window.confirm('确定删除模型“' + model.id + '”吗？此操作不可撤销。')) return;
+    if (!window.confirm(t('确定删除模型“') + model.id + t('”吗？此操作不可撤销。'))) return;
     try {
       await api('/api/admin/models/' + encodeURIComponent(model.id), { method: 'DELETE' });
       notify('已删除', 'ok');
@@ -946,14 +1063,14 @@
         $('#console-preview-out').textContent = JSON.stringify(preview, null, 2);
       } catch (err) {
         $('#console-preview-panel').style.display = '';
-        $('#console-preview-out').textContent = '预览失败：' + err.message;
+        $('#console-preview-out').textContent = t('预览失败：' + err.message);
       }
     } else {
       $('#console-preview-panel').style.display = 'none';
     }
 
     state.controller = new AbortController();
-    const headers = { 'content-type': 'application/json' };
+    const headers = { 'content-type': 'application/json', 'accept-language': i18n.lang };
     if (state.token) headers['x-admin-token'] = state.token;
 
     try {
@@ -968,8 +1085,8 @@
         if (!response.ok && data) output.textContent = extractError(data) || output.textContent;
       }
     } catch (err) {
-      if (err.name === 'AbortError') output.textContent += '\n[已停止]';
-      else output.textContent += '\n[错误] ' + err.message;
+      if (err.name === 'AbortError') output.textContent += t('\n[已停止]');
+      else output.textContent += t('\n[错误] ') + err.message;
     } finally {
       $('#console-send').disabled = false;
       $('#console-stop').disabled = true;
@@ -1033,9 +1150,9 @@
     try { data = JSON.parse(dataText); } catch (e) { return; }
     if (event === 'response.output_text.delta' && data.delta) output.textContent += data.delta;
     else if (event.indexOf('reasoning_summary_text.delta') !== -1 && data.delta) output.textContent += data.delta;
-    else if (event === 'response.function_call_arguments.delta' && data.delta) output.textContent += '\n[工具参数] ' + data.delta;
+    else if (event === 'response.function_call_arguments.delta' && data.delta) output.textContent += t('\n[工具参数] ') + data.delta;
     else if (event === 'response.failed' && data.response && data.response.error) {
-      output.textContent += '\n[错误] ' + data.response.error.message;
+      output.textContent += t('\n[错误] ') + data.response.error.message;
     }
   }
 
@@ -1087,7 +1204,7 @@
       input.dataset.level = level;
       box.append(el('label', { class: 'check' }, [
         input,
-        el('span', { text: level + (model.reasoning.default === level ? '（默认）' : '') }),
+        el('span', { text: level + t(model.reasoning.default === level ? '（默认）' : '') }),
       ]));
     });
     if (!levels.length) box.append(el('span', { class: 'muted', text: '该模型没有可对比的档位。' }));
@@ -1124,7 +1241,7 @@
     $('#compare-send').disabled = true;
     $('#compare-stop').disabled = false;
 
-    const headers = { 'content-type': 'application/json' };
+    const headers = { 'content-type': 'application/json', 'accept-language': i18n.lang };
     if (state.token) headers['x-admin-token'] = state.token;
 
     try {
@@ -1193,26 +1310,26 @@
 
   function compareResultCard(result) {
     const metrics = [
-      el('span', { class: 'chip' }, ['状态 ', badge(String(result.status || '—'), result.ok ? 'ok' : 'err')]),
-      el('span', { class: 'chip' }, ['总耗时 ', el('strong', { text: result.elapsed_ms + ' ms' })]),
+      el('span', { class: 'chip' }, [t('状态 '), badge(String(result.status || '—'), result.ok ? 'ok' : 'err')]),
+      el('span', { class: 'chip' }, [t('总耗时 '), el('strong', { text: result.elapsed_ms + ' ms' })]),
       el('span', {
         class: 'chip',
-        text: '思考 tokens ' + (result.reasoning_tokens === null || result.reasoning_tokens === undefined ? '未上报' : result.reasoning_tokens),
+        text: t('思考 tokens ') + (result.reasoning_tokens === null || result.reasoning_tokens === undefined ? t('未上报') : result.reasoning_tokens),
       }),
-      el('span', { class: 'chip', text: '思考字符 ' + (result.reasoning_chars || 0) }),
+      el('span', { class: 'chip', text: t('思考字符 ') + (result.reasoning_chars || 0) }),
       el('span', {
         class: 'chip',
-        text: '首个思考片段 ' + (result.first_reasoning_ms === null || result.first_reasoning_ms === undefined ? '—' : result.first_reasoning_ms + ' ms'),
+        text: t('首个思考片段 ') + (result.first_reasoning_ms === null || result.first_reasoning_ms === undefined ? '—' : result.first_reasoning_ms + ' ms'),
       }),
       el('span', {
         class: 'chip',
-        text: '输出 tokens ' + (result.output_tokens === null || result.output_tokens === undefined ? '未上报' : result.output_tokens),
+        text: t('输出 tokens ') + (result.output_tokens === null || result.output_tokens === undefined ? t('未上报') : result.output_tokens),
       }),
     ];
 
     const children = [
       el('div', { class: 'flex-between' }, [
-        el('h2', { style: 'margin:0', text: result.level + (result.is_default ? '（默认）' : '') }),
+        el('h2', { style: 'margin:0', text: result.level + t(result.is_default ? '（默认）' : '') }),
         el('span', { class: 'mono muted', text: result.virtual_model || '' }),
       ]),
       el('div', { class: 'compare-metrics' }, metrics),
@@ -1233,13 +1350,13 @@
 
     if (result.reasoning_text) {
       children.push(
-        el('div', { class: 'compare-label', text: '思考内容' + (result.reasoning_truncated ? '（已截断显示）' : '') }),
+        el('div', { class: 'compare-label', text: t('思考内容') + t(result.reasoning_truncated ? '（已截断显示）' : '') }),
         el('div', { class: 'compare-text', text: result.reasoning_text })
       );
     }
     if (result.output_text) {
       children.push(
-        el('div', { class: 'compare-label', text: '回答' + (result.output_truncated ? '（已截断显示）' : '') }),
+        el('div', { class: 'compare-label', text: t('回答') + t(result.output_truncated ? '（已截断显示）' : '') }),
         el('div', { class: 'compare-text', text: result.output_text })
       );
     }
@@ -1310,14 +1427,14 @@
 
     if (failed.length) {
       verdictKind = 'err';
-      verdictText = '有档位请求失败：'
-        + failed.map((lvl) => lvl + '（' + (run.results[lvl].error || '未知错误') + '）').join('；')
-        + '。请先解决失败项再判读差异。';
+      verdictText = t('有档位请求失败：')
+        + failed.map((lvl) => lvl + t('（') + (run.results[lvl].error || t('未知错误')) + t('）')).join(t('；'))
+        + t('。请先解决失败项再判读差异。');
     } else if (finished.length < levels.length) {
-      verdictText = '对比尚未完成，当前为已完成档位的初步结果。';
+      verdictText = t('对比尚未完成，当前为已完成档位的初步结果。');
     } else if (values.every((v) => v === 0)) {
-      verdictText = '各档位都没有返回可观察的思考内容，也没有上报思考 token：无法判断档位是否生效。'
-        + '若上游支持，可在模型配置的 request_overrides 中要求返回思考摘要（例如 Responses 协议加 reasoning.summary=auto），或改用会上报 usage 的服务商。';
+      verdictText = t('各档位都没有返回可观察的思考内容，也没有上报思考 token：无法判断档位是否生效。')
+        + t('若上游支持，可在模型配置的 request_overrides 中要求返回思考摘要（例如 Responses 协议加 reasoning.summary=auto），或改用会上报 usage 的服务商。');
     } else if (new Set(values).size > 1) {
       verdictKind = 'ok';
       const descending = levels.slice().sort((a, b) => (
@@ -1325,12 +1442,13 @@
       ));
       const detail = descending.map((lvl) => {
         const index = finished.indexOf(lvl);
-        return lvl + ' ' + (tokenBasis ? values[index] + ' tokens' : values[index] + ' 字符');
-      }).join('，');
-      verdictText = '各档位的思考长度存在差异，档位映射已产生不同效果（' + basisLabel + '）。从长到短：' + detail + '。';
+        return lvl + ' ' + (tokenBasis ? values[index] + ' tokens' : values[index] + t(' 字符'));
+      }).join(t('，'));
+      verdictText = t('各档位的思考长度存在差异，档位映射已产生不同效果（') + t(basisLabel)
+        + t('）。从长到短：') + detail + t('。');
     } else {
-      verdictText = '各档位的思考长度完全相同：可能是上游不区分这些档位的参数，也可能是映射没有真正改变上游行为。'
-        + '建议核对每个档位“注入到上游请求的参数”，并确认该模型在上游确实区分这些参数。';
+      verdictText = t('各档位的思考长度完全相同：可能是上游不区分这些档位的参数，也可能是映射没有真正改变上游行为。')
+        + t('建议核对每个档位“注入到上游请求的参数”，并确认该模型在上游确实区分这些参数。');
     }
     box.append(el('div', { class: 'verdict ' + verdictKind, text: verdictText }));
   }
@@ -1465,7 +1583,9 @@
   // ------------------------------------------------- full backup (bundle)
   function exportBundle(includeKeys) {
     const path = '/api/admin/config/bundle' + (includeKeys ? '' : '?include_keys=false');
-    fetch(path, { headers: state.token ? { 'x-admin-token': state.token } : {} })
+    const headers = { 'accept-language': i18n.lang };
+    if (state.token) headers['x-admin-token'] = state.token;
+    fetch(path, { headers: headers })
       .then((response) => {
         if (!response.ok) throw new Error('HTTP ' + response.status);
         return response.text();
@@ -1507,17 +1627,17 @@
     const modelCount = payload.config && payload.config.models
       ? Object.keys(payload.config.models).length : 0;
 
-    const message = '将导入该备份：\n\n'
-      + '· 服务商：' + providerCount + ' 个\n'
-      + '· 模型：' + modelCount + ' 个\n'
-      + '· API Key：' + keyCount + ' 个\n\n'
+    const message = t('将导入该备份：\n\n')
+      + t('· 服务商：') + providerCount + t(' 个\n')
+      + t('· 模型：') + modelCount + t(' 个\n')
+      + t('· API Key：') + keyCount + t(' 个\n\n')
       + '当前配置会被替换（本机已有但备份里没有的 Key 会保留）。确定继续吗？';
     if (!window.confirm(message)) return;
 
     try {
       const result = await api('/api/admin/config/bundle', { method: 'POST', body: payload });
-      notify('已导入：' + result.providers + ' 服务商 / ' + result.models + ' 模型 / '
-        + (result.keys_restored || []).length + ' 个 Key', 'ok');
+      notify(t('已导入：') + result.providers + t(' 服务商 / ') + result.models + t(' 模型 / ')
+        + (result.keys_restored || []).length + t(' 个 Key'), 'ok');
       await loadConfig();
       loadStatus().catch(() => {});
     } catch (err) { notify(err.message, 'err'); }
@@ -1660,6 +1780,13 @@
 
   // ------------------------------------------------------------------ init
   function init() {
+    // Record the Chinese source text of the static markup before anything
+    // renders, so switching languages can restore it exactly.
+    collectStaticText(document.body);
+    renderStaticText();
+    updateLangToggle();
+    $('#lang-toggle').addEventListener('click', () => setLang(i18n.lang === 'zh' ? 'en' : 'zh'));
+
     initNav();
     $('#copy-base-url').addEventListener('click', () => copyText($('#zcode-base-url').value));
     $('#add-provider').addEventListener('click', () => openProviderForm(null));
@@ -1718,7 +1845,7 @@
 
     loadStatus().catch((err) => {
       const badgeEl = $('#config-status');
-      badgeEl.textContent = err.message.indexOf('Token') !== -1 ? '需要 Token' : '未连接';
+      badgeEl.textContent = t(err.message.indexOf('Token') !== -1 ? '需要 Token' : '未连接');
       badgeEl.className = 'badge err';
     });
   }

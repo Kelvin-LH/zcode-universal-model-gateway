@@ -17,6 +17,7 @@ from typing import Any
 
 from ..config import ProviderConfig
 from ..errors import UnsupportedFeatureError
+from ..i18n import tr
 from ..models import ResolvedModel
 
 # --------------------------------------------------------------------------
@@ -533,7 +534,7 @@ class Adapter(abc.ABC):
         for field in fields:
             if requested_body.get(field) is not None:
                 raise UnsupportedFeatureError(
-                    f"参数 {field!r} 无法在不改变语义的前提下转换到该服务商协议"
+                    tr("adapter.unsupported_param", field=field)
                 )
 
 
@@ -545,8 +546,8 @@ def require_api_key(provider: ProviderConfig, api_key: str | None) -> str:
     env_name = provider.api_key_env
     if env_name:
         raise ProviderAuthError(
-            f"环境变量 {env_name} 未配置。"
+            tr("auth.env_missing", env=env_name)
         )
     raise ProviderAuthError(
-        f"服务商 {provider.display_name!r} 尚未配置 API Key。"
+        tr("auth.no_key", provider=provider.display_name)
     )
