@@ -120,7 +120,7 @@ class ProviderConfig(BaseModel):
     def _check_protocol(cls, value: str) -> str:
         if value not in SUPPORTED_PROTOCOLS:
             raise ValueError(
-                f"不支持的协议 {value!r}；支持的协议："
+                f"unsupported protocol {value!r}; supported protocols: "
                 + ", ".join(SUPPORTED_PROTOCOLS)
             )
         return value
@@ -130,9 +130,9 @@ class ProviderConfig(BaseModel):
     def _check_base_url(cls, value: str) -> str:
         value = (value or "").strip()
         if not value:
-            raise ValueError("base_url 不能为空")
+            raise ValueError("base_url must not be empty")
         if not value.startswith(("http://", "https://")):
-            raise ValueError("base_url 必须以 http:// 或 https:// 开头")
+            raise ValueError("base_url must start with http:// or https://")
         return value.rstrip("/")
 
     @model_validator(mode="after")
@@ -146,7 +146,7 @@ class ProviderConfig(BaseModel):
         """Resolve a full upstream URL for ``responses``/``chat_completions``/``messages``/``models``."""
         path = getattr(self.paths, kind, None)
         if not path:
-            raise ConfigError(f"服务商未配置 {kind!r} 对应的路径")
+            raise ConfigError(f"provider has no path configured for {kind!r}")
         if not path.startswith("/"):
             path = "/" + path
         return f"{self.base_url}{path}"
@@ -182,10 +182,10 @@ class ReasoningConfig(BaseModel):
         for item in value:
             level = str(item).strip()
             if not level:
-                raise ValueError("思考档位名称不能为空")
+                raise ValueError("reasoning level names must not be empty")
             if "@" in level:
                 raise ValueError(
-                    f"思考档位名称 {level!r} 不能包含 '@'"
+                    f"reasoning level name {level!r} must not contain '@'"
                 )
             if level not in cleaned:
                 cleaned.append(level)
@@ -197,7 +197,7 @@ class ReasoningConfig(BaseModel):
         for level, payload in value.items():
             if not isinstance(payload, dict):
                 raise ValueError(
-                    f"思考档位 {level!r} 的 mapping 必须是对象"
+                    f"mapping for reasoning level {level!r} must be an object"
                 )
         return value
 
@@ -210,12 +210,12 @@ class ReasoningConfig(BaseModel):
             self.default = self.supported[0]
         if self.default is not None and self.supported and self.default not in self.supported:
             raise ValueError(
-                f"默认思考档位 {self.default!r} 不在支持的档位 {self.supported} 中"
+                f"default reasoning level {self.default!r} is not in the supported levels {self.supported}"
             )
         unknown = [level for level in self.mapping if level not in self.supported]
         if unknown:
             raise ValueError(
-                "reasoning mapping 中含有未在 supported 中列出的档位："
+                "reasoning mapping contains levels not listed in supported: "
                 + ", ".join(map(str, unknown))
             )
         return self
@@ -278,7 +278,7 @@ class Config(BaseModel):
         for key in value:
             if not key or "@" in key:
                 raise ValueError(
-                    f"标识符 {key!r} 无效：不能为空，且不能包含 '@'"
+                    f"invalid identifier {key!r}: must not be empty and must not contain '@'"
                 )
         return value
 
@@ -287,7 +287,7 @@ class Config(BaseModel):
         for model_id, model in self.models.items():
             if model.provider not in self.providers:
                 raise ValueError(
-                    f"模型 {model_id!r} 引用了不存在的服务商 {model.provider!r}"
+                    f"model {model_id!r} references unknown provider {model.provider!r}"
                 )
         return self
 
@@ -322,29 +322,29 @@ def parse_config(data: Any) -> Config:
     if data is None:
         data = {}
     if not isinstance(data, dict):
-        raise ConfigError("配置文件的根节点必须是映射/对象")
+        raise ConfigError("the config file root must be a mapping/object")
     try:
         return Config.model_validate(data)
     except Exception as exc:  # pydantic ValidationError and friends
-        raise ConfigError(f"配置无效：{exc}") from exc
+        raise ConfigError(f"invalid config: {exc}") from exc
 
 
 def load_config_text(text: str) -> Config:
     try:
         data = yaml.load(text, Loader=_Yaml12SafeLoader)
     except yaml.YAMLError as exc:
-        raise ConfigError(f"YAML 解析错误：{exc}") from exc
+        raise ConfigError(f"YAML parse error: {exc}") from exc
     return parse_config(data)
 
 
 def load_config_file(path: str | os.PathLike[str]) -> Config:
     path = Path(path)
     if not path.exists():
-        raise ConfigError(f"找不到配置文件：{path}")
+        raise ConfigError(f"config file not found: {path}")
     try:
         text = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ConfigError(f"无法读取配置文件 {path}：{exc}") from exc
+        raise ConfigError(f"cannot read config file {path}: {exc}") from exc
     return load_config_text(text)
 
 

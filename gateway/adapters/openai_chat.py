@@ -74,8 +74,8 @@ def _chat_content(content: Any) -> Any:
                 url = url.get("url")
             if not url:
                 raise UnsupportedFeatureError(
-                    "input_image 缺少 URL（例如仅提供 file_id）时，"
-                    "无法转换到 Chat Completions"
+                    "input_image without a URL (e.g. only a file_id given) "
+                    "cannot be converted to Chat Completions"
                 )
             block = {"type": "image_url", "image_url": {"url": url}}
             if detail:
@@ -83,7 +83,7 @@ def _chat_content(content: Any) -> Any:
             blocks.append(block)
         else:
             raise UnsupportedFeatureError(
-                f"内容块类型 {ptype!r} 无法转换到 Chat Completions"
+                f"content block type {ptype!r} cannot be converted to Chat Completions"
             )
 
     if not blocks:
@@ -114,14 +114,14 @@ def input_to_messages(inp: Any) -> list[dict[str, Any]]:
             messages.append({"role": "user", "content": inp})
         return messages
     if not isinstance(inp, list):
-        raise AdapterError("'input' 必须是字符串或输入项数组")
+        raise AdapterError("'input' must be a string or an array of input items")
 
     for item in inp:
         if isinstance(item, str):
             messages.append({"role": "user", "content": item})
             continue
         if not isinstance(item, dict):
-            raise AdapterError("输入项必须是对象")
+            raise AdapterError("each input item must be an object")
 
         itype = item.get("type")
         if itype == "function_call":
@@ -172,7 +172,7 @@ def input_to_messages(inp: Any) -> list[dict[str, Any]]:
             continue
 
         raise UnsupportedFeatureError(
-            f"输入项类型 {itype!r} 无法转换到 Chat Completions"
+            f"input item type {itype!r} cannot be converted to Chat Completions"
         )
     return messages
 
@@ -183,11 +183,11 @@ def _tools_to_chat(tools: Any) -> list[dict[str, Any]] | None:
     out: list[dict[str, Any]] = []
     for tool in tools:
         if not isinstance(tool, dict):
-            raise AdapterError("每个 tool 必须是对象")
+            raise AdapterError("each tool must be an object")
         ttype = tool.get("type", "function")
         if ttype != "function":
             raise UnsupportedFeatureError(
-                f"tool 类型 {ttype!r} 无法转换到 Chat Completions"
+                f"tool type {ttype!r} cannot be converted to Chat Completions"
             )
         if isinstance(tool.get("function"), dict):
             out.append({"type": "function", "function": tool["function"]})
@@ -211,12 +211,12 @@ def _tool_choice_to_chat(choice: Any) -> Any:
         if choice.get("type") == "function":
             name = choice.get("name") or (choice.get("function") or {}).get("name")
             if not name:
-                raise AdapterError("tool_choice 的 function 缺少 name")
+                raise AdapterError("tool_choice function is missing 'name'")
             return {"type": "function", "function": {"name": name}}
         raise UnsupportedFeatureError(
-            f"tool_choice 类型 {choice.get('type')!r} 无法转换到 Chat Completions"
+            f"tool_choice type {choice.get('type')!r} cannot be converted to Chat Completions"
         )
-    raise AdapterError("无效的 tool_choice")
+    raise AdapterError("invalid tool_choice")
 
 
 def _text_format_to_response_format(text: Any) -> dict[str, Any] | None:
@@ -239,7 +239,7 @@ def _text_format_to_response_format(text: Any) -> dict[str, Any] | None:
             json_schema["strict"] = fmt["strict"]
         return {"type": "json_schema", "json_schema": json_schema}
     raise UnsupportedFeatureError(
-        f"text.format 类型 {ftype!r} 无法转换到 Chat Completions"
+        f"text.format type {ftype!r} cannot be converted to Chat Completions"
     )
 
 
@@ -285,7 +285,7 @@ class OpenAIChatAdapter(Adapter):
         if isinstance(body.get("messages"), list):
             messages.extend(body["messages"])
         if not messages:
-            raise AdapterError("请求中没有任何输入消息")
+            raise AdapterError("request contains no input messages")
         chat["messages"] = messages
 
         for key in _DIRECT_FIELDS:
@@ -323,7 +323,7 @@ class OpenAIChatAdapter(Adapter):
         self, resolved: ResolvedModel, upstream: dict[str, Any], status_code: int
     ) -> dict[str, Any]:
         if not isinstance(upstream, dict):
-            raise AdapterError("上游返回的响应不是 JSON 对象")
+            raise AdapterError("upstream response is not a JSON object")
         if "error" in upstream and "choices" not in upstream:
             return upstream
 
@@ -409,7 +409,7 @@ class OpenAIChatAdapter(Adapter):
                     message = (
                         err.get("message") if isinstance(err, dict) else str(err)
                     )
-                    for ev in builder.fail(message or "上游流式响应出错"):
+                    for ev in builder.fail(message or "upstream streaming response failed"):
                         yield ev
                     return
                 if not isinstance(chunk, dict):
@@ -462,5 +462,5 @@ class OpenAIChatAdapter(Adapter):
                 yield ev
         except Exception as exc:  # pragma: no cover - defensive
             log.warning("chat stream translation failed: %s", exc)
-            for ev in builder.fail(f"流式转换失败：{exc}"):
+            for ev in builder.fail(f"stream translation failed: {exc}"):
                 yield ev

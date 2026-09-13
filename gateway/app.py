@@ -62,7 +62,7 @@ def create_app(
         manager.load_or_default()
         await router.startup()
         log.info(
-            "ZUMG %s 已启动；配置=%s 服务商=%d 模型=%d",
+            "ZUMG %s started; config=%s providers=%d models=%d",
             __version__,
             path,
             len(manager.config.providers),
@@ -109,7 +109,7 @@ def create_app(
             content={
                 "error": {
                     "type": "internal_error",
-                    "message": "发生了未预期的内部错误",
+                    "message": "An unexpected internal error occurred",
                 }
             },
         )
@@ -150,7 +150,7 @@ def create_app(
         body = await _json_body(request)
         model = body.get("model")
         if not model:
-            raise UnknownModelError("请求中没有提供 model 参数")
+            raise UnknownModelError("no model parameter in request")
 
         if body.get("stream"):
             # Resolve and validate before the response starts so auth/model
@@ -182,7 +182,7 @@ def create_app(
         body = await _json_body(request)
         model = body.get("model")
         if not model:
-            raise UnknownModelError("请求中没有提供 model 参数")
+            raise UnknownModelError("no model parameter in request")
         # Present the body as a Responses request so adapters can consume it.
         responses_body = dict(body)
         if "input" not in responses_body and body.get("messages") is not None:
@@ -243,11 +243,11 @@ async def _json_body(request: Request) -> dict[str, Any]:
     except Exception as exc:
         from .errors import AdapterError
 
-        raise AdapterError(f"请求体必须是合法 JSON：{exc}") from exc
+        raise AdapterError(f"request body must be valid JSON: {exc}") from exc
     if not isinstance(body, dict):
         from .errors import AdapterError
 
-        raise AdapterError("请求体必须是一个 JSON 对象")
+        raise AdapterError("request body must be a JSON object")
     return body
 
 

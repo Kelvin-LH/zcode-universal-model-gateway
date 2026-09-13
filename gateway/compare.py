@@ -4,8 +4,8 @@ Sends one request body once per reasoning level of a model and reports, per
 level, what actually came back: the reasoning text length, the reasoning token
 count when the upstream reports one, timings, and the mapping the gateway
 injected into the upstream body. This is the data behind the Web UI's
-"档位对比" view — a way to check that each ``model@level`` virtual id really
-changes upstream behaviour, instead of trusting the configuration.
+"Level Comparison" view — a way to check that each ``model@level`` virtual id
+really changes upstream behaviour, instead of trusting the configuration.
 
 Results are yielded as each level completes so the UI can render them
 progressively; one failing level never cancels the others.
@@ -47,7 +47,7 @@ def select_levels(
     """
     model = router.config_manager.config.models.get(model_id)
     if model is None:
-        raise UnknownModelError(f"未知模型 {model_id!r}")
+        raise UnknownModelError(f"unknown model {model_id!r}")
 
     reasoning = model.reasoning
     supported = list(reasoning.supported) if reasoning and reasoning.enabled else []
@@ -55,7 +55,7 @@ def select_levels(
     if levels is None:
         if not supported:
             raise GatewayError(
-                f"模型 {model_id!r} 没有配置思考档位，无法对比",
+                f"model {model_id!r} has no reasoning levels configured, nothing to compare",
                 error_type="no_reasoning_levels",
                 status_code=409,
             )
@@ -68,13 +68,13 @@ def select_levels(
             continue
         if name not in supported:
             raise UnknownReasoningLevelError(
-                f"模型 {model_id!r} 不支持思考档位 {name!r}；"
-                f"支持的档位：{', '.join(supported) if supported else '（无）'}"
+                f"model {model_id!r} does not support reasoning level {name!r}; "
+                f"supported levels: {', '.join(supported) if supported else '(none)'}"
             )
         selected.append(name)
     if not selected:
         raise GatewayError(
-            "没有选择任何思考档位",
+            "no reasoning levels selected",
             error_type="no_reasoning_levels",
             status_code=400,
         )
@@ -104,7 +104,7 @@ def _apply_usage(metrics: dict[str, Any], usage: Any) -> None:
     ``reasoning_tokens`` stays ``None`` unless the upstream reports a positive
     value: adapters surface ``0`` both for "thinking was off" and for "this
     upstream does not break reasoning tokens out", and the UI should say
-    "未上报" rather than imply a measurement.
+    "not reported" rather than imply a measurement.
     """
     if not isinstance(usage, dict) or not usage:
         return
@@ -223,7 +223,7 @@ class _StreamCollector:
             if etype == "response.failed":
                 err = response.get("error")
                 message = err.get("message") if isinstance(err, dict) else None
-                self.error = message or "上游返回 response.failed"
+                self.error = message or "upstream returned response.failed"
             # A relay that omits deltas may still send the finished text.
             if not self._reasoning or not self._answer:
                 reasoning, answer = _text_from_output_items(response)

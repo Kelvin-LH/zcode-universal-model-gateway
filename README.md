@@ -1,5 +1,7 @@
 # ZCode Universal Model Gateway（ZUMG）
 
+**中文** | [English](README.en.md)
+
 一个本地运行的 **OpenAI Responses 兼容** 网关。ZCode 只需连接一个本地地址
 （`http://127.0.0.1:8787/v1`），网关负责把请求转发到你在配置里指定的上游服务商
 ——OpenAI Responses、OpenAI Chat Completions、Anthropic Messages，或任何
@@ -562,7 +564,8 @@ Key）同样被 git 忽略。
 - `.gitattributes` 强制 `start.sh` 使用 LF、Windows 脚本使用 CRLF，因此在
   Linux/macOS 上克隆后 `start.sh` 依然可执行。如果可执行位丢失，用
   `bash start.sh` 或先执行一次 `chmod +x start.sh`。
-- 代码注释、docstring 与标识符保留英文以便复用；界面、错误提示和本文档为中文。
+- 代码注释、docstring 与标识符保留英文以便复用；界面与错误提示为英文，
+  文档提供中英双语（`README.md` 中文 / `README.en.md` 英文）。
 
 ## 已知限制
 
