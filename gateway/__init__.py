@@ -5,5 +5,5 @@ upstream providers (OpenAI Responses, OpenAI Chat Completions, Anthropic
 Messages and OpenAI-compatible proxies) through a single local endpoint.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = ["__version__"]
