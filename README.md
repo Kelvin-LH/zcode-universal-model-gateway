@@ -108,6 +108,47 @@ GATEWAY_HOST=127.0.0.1
 GATEWAY_PORT=8787
 ```
 
+## 打包成单文件 exe（Windows，免装 Python）
+
+如果目标电脑不想装 Python，可以打包成一个独立 exe 带过去。
+
+**构建**（在开发机上执行一次）：
+
+```powershell
+.\build_exe.bat
+```
+
+脚本会装好 PyInstaller（如缺）并调用 `zumg.spec`，产物为 `dist\ZUMG.exe`（约 18 MB，单文件）。
+
+**使用**：把 `ZUMG.exe` 拷到任意 Windows 电脑，**双击即可**。它会在自己旁边：
+
+- 首次运行自动生成 `config.yaml`
+- 在 Web 界面保存的 Key 写入同目录的 `secrets.local.json`
+- 打开 <http://127.0.0.1:8787/> 管理界面
+
+也就是说整个程序是**便携的**：一个 exe + 它自动生成的两个配置文件，放在 U 盘或任意文件夹都能跑，不写注册表、不装依赖。
+
+### 换电脑：一个文件带走全部配置
+
+不想手动拷贝 `config.yaml` 和 `secrets.local.json`，可以在 Web 界面
+**配置 → 完整备份** 里点 **「导出完整备份」**，得到一个 `zumg-backup-日期.json`。
+它包含：
+
+- 全部服务商、模型、思考档位与映射
+- 全部已保存的 API Key
+
+在新电脑上打开网关 → 配置 → **「导入完整备份」** → 选择该文件，确认后即完成恢复。
+（在界面里保存的 Key 才会进入备份；用环境变量提供的 Key 无法导出。）
+
+> ⚠️ 该文件包含**明文 Key**，请妥善保管，不要上传到网盘、GitHub 或聊天工具。
+> 只想导出配置、不带 Key 时，用「导出（不含 Key）」。
+
+注意事项：
+
+- exe 只能在与构建时**相同的操作系统**上运行（Windows 构建的只能在 Windows 用；macOS/Linux 需在各自系统上重新打包）。
+- 首次启动可能会被 Windows Defender SmartScreen 拦截（未签名的可执行文件的常见行为），选择"仍要运行"即可。
+- 换端口：启动前设环境变量 `GATEWAY_PORT=8899`，或在同一目录放 `.env` 文件。
+
 ## 快速上手
 
 ```bash
@@ -460,11 +501,13 @@ gateway/
   secrets.py         # 本地密钥文件 + 内存临时 Key + 环境变量
   metrics.py         # 内存 metrics 与有界请求日志
   errors.py          # 统一错误类型
+  paths.py           # 源码/冻结(exe)两种模式下的路径解析
   adapters/          # openai_responses、openai_chat、anthropic_messages
   admin/api.py       # 管理 API
   static/            # index.html、style.css、app.js
 tests/               # pytest 测试（全部 Mock 上游）
 config.example.yaml  requirements*.txt  README.md
+run_gateway.py  zumg.spec  build_exe.bat   # exe 打包（入口 / 配置 / 一键脚本）
 start.bat  start.ps1  start.sh           # 可移植启动脚本（不写死路径）
 .gitignore  .gitattributes  .env.example
 ```

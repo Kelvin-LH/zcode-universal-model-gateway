@@ -329,3 +329,88 @@ async def test_test_connection_uses_models_endpoint(build_app, client_factory):
     assert result["status"] == 200
     assert result["model_count"] == 2
     assert seen["url"].endswith("/models")
+
+
+async def test_bundle_export_contains_config_and_keys(build_app, client_factory):
+    """The bundle is the single file you carry to another machine."""
+    harness = build_app()
+    client = client_factory(harness.app)
+
+    resp = await client.get("/api/admin/config/bundle")
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["format"] == "zumg.bundle.v1"
+    assert set(payload["config"]["providers"]) == {
+        "responses_provider",
+        "chat_provider",
+        "anthropic_provider",
+    }
+    assert "foo" in payload["config"]["models"]
+    # Keys from environment variables cannot be extracted, so a fresh bundle
+    # carries no keys until the user saves one locally (covered below).
+    assert payload["keys"] == {}
+    assert "sk-responses-secret" not in str(payload)
+
+
+async def test_bundle_can_exclude_keys(build_app, client_factory):
+    harness = build_app()
+    client = client_factory(harness.app)
+    payload = (
+        await client.get("/api/admin/config/bundle?include_keys=false")
+    ).json()
+    assert payload["keys"] == {}
+    assert payload["config"]["models"]
+
+
+async def test_bundle_round_trip_restores_models_and_keys(build_app, client_factory):
+    harness = build_app()
+    client = client_factory(harness.app)
+
+    # Save a key so it is part of the backup, then export.
+    await client.put(
+        "/api/admin/providers/chat_provider/key",
+        json={"api_key": "sk-carried-over", "persist": True},
+    )
+    bundle = (await client.get("/api/admin/config/bundle")).json()
+    assert bundle["keys"]["chat_provider"] == "sk-carried-over"
+
+    # Wipe the machine: reset config and forget the key.
+    await client.post("/api/admin/config/reset-example")
+    await client.delete("/api/admin/providers/chat_provider/key")
+
+    # Restore on the "new machine".
+    resp = await client.post("/api/admin/config/bundle", json=bundle)
+    assert resp.status_code == 200
+    result = resp.json()
+    assert result["imported"] is True
+    assert "chat_provider" in result["keys_restored"]
+
+    models = (await client.get("/api/admin/models")).json()["models"]
+    assert any(m["id"] == "foo" for m in models)
+    providers = (await client.get("/api/admin/providers")).json()["providers"]
+    chat = next(p for p in providers if p["id"] == "chat_provider")
+    assert chat["key_status"]["source"] == "local"
+    assert chat["key_status"]["available"] is True
+
+
+async def test_bundle_import_rejects_foreign_key(build_app, client_factory):
+    """A hand-edited backup cannot smuggle in keys for unknown providers."""
+    harness = build_app()
+    client = client_factory(harness.app)
+    bad = {
+        "format": "zumg.bundle.v1",
+        "config": {"providers": {}, "models": {}},
+        "keys": {"ghost": "sk-ghost"},
+    }
+    resp = await client.post("/api/admin/config/bundle", json=bad)
+    assert resp.status_code == 400
+    assert "不存在" in resp.json()["detail"]
+
+
+async def test_bundle_import_rejects_wrong_format(build_app, client_factory):
+    harness = build_app()
+    client = client_factory(harness.app)
+    resp = await client.post(
+        "/api/admin/config/bundle", json={"format": "something-else", "config": {}}
+    )
+    assert resp.status_code == 400

@@ -8,7 +8,9 @@ returned — only availability status.
 
 from __future__ import annotations
 
+import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +26,7 @@ from ..config import (
     ModelConfig,
     ProviderConfig,
     load_config_text,
+    parse_config,
 )
 from ..errors import GatewayError
 from ..metrics import Metrics
@@ -31,6 +34,11 @@ from ..router import Router, test_connection
 from ..secrets import SecretStore
 
 ADMIN_TOKEN_ENV = "GATEWAY_ADMIN_TOKEN"
+
+# Marker for the single-file backup that carries the configuration *and* the
+# saved API keys, so one file can be moved to another machine.
+BUNDLE_FORMAT = "zumg.bundle.v1"
+BUNDLE_VERSION = 1
 
 
 def require_admin(request: Request) -> None:
@@ -503,6 +511,81 @@ def build_admin_router(
             raise HTTPException(status_code=404, detail="找不到 config.example.yaml")
         manager.save_text(example.read_text(encoding="utf-8"))
         return {"reset": True}
+
+    # -- full backup (config + saved keys in one file) --------------------
+
+    @api.get("/config/bundle")
+    async def export_bundle(include_keys: bool = Query(default=True)) -> Response:
+        """Download one file containing the configuration and saved keys.
+
+        This is the "carry it to another machine" file. It holds plaintext
+        credentials, so it must be stored somewhere private.
+        """
+        config = manager.config
+        keys = (
+            secrets.export_keys(only_providers=set(config.providers))
+            if include_keys
+            else {}
+        )
+        payload = {
+            "format": BUNDLE_FORMAT,
+            "version": BUNDLE_VERSION,
+            "exported_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "config": config.to_dict(),
+            "keys": keys,
+        }
+        return Response(
+            content=json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            media_type="application/json",
+            headers={
+                "content-disposition": 'attachment; filename="zumg-backup.json"'
+            },
+        )
+
+    @api.post("/config/bundle")
+    async def import_bundle(payload: dict = Body(...)) -> dict[str, Any]:
+        """Restore a backup created by :func:`export_bundle`.
+
+        The configuration replaces the active one (after validation); keys are
+        merged so providers that only exist on this machine keep their key.
+        """
+        if payload.get("format") != BUNDLE_FORMAT:
+            raise HTTPException(
+                status_code=400,
+                detail="不是有效的完整备份文件（缺少 format 标记）",
+            )
+        config_data = payload.get("config")
+        if not isinstance(config_data, dict):
+            raise HTTPException(status_code=400, detail="备份文件缺少 config 内容")
+
+        previous = manager.config
+        try:
+            new_config = parse_config(config_data)
+        except ConfigError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        keys = payload.get("keys") or {}
+        if not isinstance(keys, dict):
+            raise HTTPException(status_code=400, detail="备份文件的 keys 字段格式不正确")
+
+        # Validate keys belong to providers that exist in the restored config,
+        # so a hand-edited backup cannot introduce orphaned credentials.
+        unknown = [pid for pid in keys if pid not in new_config.providers]
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail="备份文件包含配置中不存在的服务商 Key：" + ", ".join(map(str, unknown)),
+            )
+
+        manager.save_config(new_config)
+        written = secrets.import_keys(keys)
+        return {
+            "imported": True,
+            "providers": len(new_config.providers),
+            "models": len(new_config.models),
+            "keys_restored": written,
+            "diff": _config_diff(previous, new_config),
+        }
 
     return api
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import uvicorn
 
 from .app import HOST_ENV, PORT_ENV, create_app
+from .paths import app_dir, example_config_path, is_frozen
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
@@ -17,12 +18,12 @@ DEFAULT_CONFIG = "config.yaml"
 EXAMPLE_CONFIG = "config.example.yaml"
 
 
-def load_dotenv(path: str = ".env") -> None:
+def load_dotenv(path: str | None = None) -> None:
     """Minimal .env loader (no third-party dependency).
 
     Existing environment variables are never overwritten.
     """
-    env_file = Path(path)
+    env_file = Path(path) if path is not None else (app_dir() / ".env")
     if not env_file.is_file():
         return
     for raw in env_file.read_text(encoding="utf-8").splitlines():
@@ -36,22 +37,23 @@ def load_dotenv(path: str = ".env") -> None:
             os.environ[key] = value
 
 
-def ensure_config(path: str = DEFAULT_CONFIG) -> None:
+def ensure_config(path: str) -> None:
     """Create a working config from the example on first run.
 
-    A fresh clone has no ``config.yaml`` (it is git-ignored). Rather than
-    starting empty, copy the example so the user has providers/models to edit
-    in the Web UI immediately.
+    The example is looked up next to the target first (so a portable exe picks
+    up a user-provided example), then in the bundled resources.
     """
     target = Path(path)
     if target.exists():
         return
-    example = target.parent / EXAMPLE_CONFIG
-    if example.is_file():
-        shutil.copyfile(example, target)
-        logging.getLogger("zumg").info(
-            "已从 %s 生成 %s", example.name, target.name
-        )
+    candidates = [target.parent / EXAMPLE_CONFIG, example_config_path()]
+    for example in candidates:
+        if example.is_file():
+            shutil.copyfile(example, target)
+            logging.getLogger("zumg").info(
+                "已从 %s 生成 %s", example.name, target.name
+            )
+            return
 
 
 def print_banner(host: str, port: int) -> None:
@@ -73,19 +75,36 @@ def print_banner(host: str, port: int) -> None:
     print(flush=True)
 
 
+def resolve_config_path() -> str:
+    """Where config.yaml lives.
+
+    ``GATEWAY_CONFIG`` wins. Otherwise the file lives next to the executable
+    when frozen (so a portable exe stays self-contained), or in the working
+    directory when run from source.
+    """
+    explicit = os.environ.get("GATEWAY_CONFIG")
+    if explicit:
+        return explicit
+    if is_frozen():
+        return str(app_dir() / DEFAULT_CONFIG)
+    return DEFAULT_CONFIG
+
+
 def main() -> None:
     logging.basicConfig(
         level=os.environ.get("GATEWAY_LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     load_dotenv()
-    ensure_config(os.environ.get("GATEWAY_CONFIG", DEFAULT_CONFIG))
+
+    config_path = resolve_config_path()
+    ensure_config(config_path)
 
     host = os.environ.get(HOST_ENV, DEFAULT_HOST)
     port = int(os.environ.get(PORT_ENV, str(DEFAULT_PORT)))
 
     print_banner(host, port)
-    app = create_app()
+    app = create_app(config_path)
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
